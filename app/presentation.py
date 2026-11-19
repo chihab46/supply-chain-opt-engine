@@ -1,33 +1,111 @@
-"""Code-native charts and compact result views for the planning workbench."""
+"""Code-native charts and result views for the planning workbench.
+
+Visual rules shared by every view (mirrors the tokens in assets/dashboard.css):
+
+- One accent (dispatch blue) for the optimizer and forecasts; ink for actuals.
+- Vermillion is reserved for exceptions: storage breaches and missed targets.
+- Status is never colour alone: every state carries a symbol and words, and
+  chart series differ by marker shape or line style as well as colour. The
+  palette avoids pairing green with yellow.
+"""
 
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from dash import dcc, html
 
 from supply_chain_opt_engine.dashboard_data import POLICY_LABELS
 from supply_chain_opt_engine.optimization import MILP
 
-INK = "#20332e"
-GREEN = "#237558"
-MUTED = "#66756d"
+INK = "#17202a"
+INK_2 = "#3d4752"
+MUTED = "#6b7480"
+RULE = "#e3e0da"
+GRID = "#eeebe5"
+ACCENT = "#1f4f8f"
+ALERT = "#b8401c"
+BAND_OUTER = "rgba(31,79,143,.10)"
+BAND_INNER = "rgba(31,79,143,.20)"
+RECEIPTS = "#c9d3df"
+FONT = "Lato, system-ui, sans-serif"
+GRAPH = {"displayModeBar": False, "responsive": True}
+
+# One fixed style per policy, used by every chart and table: colour, marker
+# shape and a short direct label, so no policy is identified by colour alone.
+POLICY_STYLE = {
+    MILP: (ACCENT, "circle", "MILP"),
+    "lightgbm_p90_weekly_order_up_to": (INK, "square", "P90 weekly"),
+    "lightgbm_p90_order_up_to": ("#7d8590", "diamond", "P90 daily"),
+    "lightgbm_p50_order_up_to": ("#5b9bd5", "triangle-up", "P50 daily"),
+    "seasonal_naive_p50_order_up_to": ("#8e6bb0", "triangle-down", "SeasonalNaive"),
+    "autoets_static_safety_stock": ("#a4632f", "cross", "AutoETS + SS"),
+}
+# Table keys use the same shape as the chart marker for each policy.
+GLYPH = {
+    "circle": "●",
+    "square": "■",
+    "diamond": "◆",
+    "triangle-up": "▲",
+    "triangle-down": "▼",
+    "cross": "✚",
+}
+STORE_DASH = ["solid", "dash", "dot", "dashdot"]
+STORE_COLOR = [INK, ACCENT, "#7d8590", "#8e6bb0"]
+
+
+def policy_style(policy):
+    base = policy.removesuffix("_rolling")
+    return POLICY_STYLE.get(base, ("#7d8590", "circle", POLICY_LABELS.get(base, base)))
+
+
+def policy_label(policy):
+    base = policy.removesuffix("_rolling")
+    label = POLICY_LABELS.get(base, base)
+    return f"{label} (rolling)" if policy.endswith("_rolling") else label
 
 
 def theme(fig, height=340):
     fig.update_layout(
         height=height,
-        margin=dict(l=54, r=22, t=20, b=48),
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Lato, sans-serif", size=13, color=INK),
+        margin=dict(l=8, r=12, t=32, b=8),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FONT, size=12, color=INK_2),
         hovermode="x unified",
+        hoverlabel=dict(bgcolor="white", bordercolor="#cdc8bf", font=dict(family=FONT, size=12)),
         legend=dict(
-            orientation="h", y=1.1, x=1.0, xanchor="right", traceorder="normal", font=dict(size=12)
+            orientation="h",
+            y=1.0,
+            yanchor="bottom",
+            x=0,
+            xanchor="left",
+            font=dict(size=12, color=INK_2),
+            bgcolor="rgba(0,0,0,0)",
+            itemclick=False,
+            itemdoubleclick=False,
         ),
     )
-    fig.update_xaxes(showgrid=False, zeroline=False, automargin=True)
-    fig.update_yaxes(gridcolor="rgba(32,51,46,.08)", zeroline=False, automargin=True)
+    fig.update_xaxes(
+        showgrid=False,
+        zeroline=False,
+        automargin=True,
+        showline=True,
+        linecolor="#cdc8bf",
+        ticks="outside",
+        ticklen=4,
+        tickcolor="#cdc8bf",
+        tickfont=dict(color=MUTED),
+    )
+    fig.update_yaxes(
+        gridcolor=GRID,
+        zeroline=False,
+        automargin=True,
+        tickfont=dict(color=MUTED),
+        title_font=dict(color=MUTED, size=12),
+        separatethousands=True,
+    )
     return fig
 
 
@@ -40,83 +118,154 @@ def empty_figure(message, height=320):
         xref="paper",
         yref="paper",
         showarrow=False,
-        font=dict(color=MUTED, size=14),
+        font=dict(color=MUTED, size=13),
     )
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
     return fig
 
 
+def units(value, digits=0):
+    return "—" if value is None or not np.isfinite(value) else f"{value:,.{digits}f}"
+
+
+def money(value):
+    return "—" if value is None or not np.isfinite(value) else f"${value:,.2f}"
+
+
+def rate(value):
+    return "N/A" if value is None or not np.isfinite(value) else f"{value:.2%}"
+
+
+def status(ok, good_text, bad_text):
+    """A state shown as symbol plus words, never colour alone."""
+    return html.Span(
+        ["✓ " if ok else "✕ ", good_text if ok else bad_text],
+        className="state state-ok" if ok else "state state-alert",
+    )
+
+
+# ---------------------------------------------------------------- forecasts
+
+
 def forecast_figure(origin, observed, forecast):
     fig = go.Figure()
+    for upper, fill, name in [("q95", BAND_OUTER, "P10–P95"), ("q90", BAND_INNER, "P10–P90")]:
+        fig.add_trace(
+            go.Scatter(
+                x=forecast.ds,
+                y=forecast.q10,
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=forecast.ds,
+                y=forecast[upper],
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor=fill,
+                name=name,
+                hoverinfo="skip",
+            )
+        )
     fig.add_trace(
         go.Scatter(
-            x=forecast.ds, y=forecast.q10, line=dict(width=0), showlegend=False, hoverinfo="skip"
+            x=observed.ds,
+            y=observed.y,
+            name="Actual",
+            line=dict(color=INK, width=1.5),
+            hovertemplate="Actual %{y:,.0f}<extra></extra>",
         )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=forecast.ds,
-            y=forecast.q95,
-            line=dict(width=0),
-            fill="tonexty",
-            fillcolor="rgba(80,170,110,.12)",
-            name="P10–P95",
-            hoverinfo="skip",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=forecast.ds, y=forecast.q10, line=dict(width=0), showlegend=False, hoverinfo="skip"
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=forecast.ds,
-            y=forecast.q90,
-            line=dict(width=0),
-            fill="tonexty",
-            fillcolor="rgba(80,170,110,.16)",
-            name="P10–P90",
-            hoverinfo="skip",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(x=observed.ds, y=observed.y, name="Actual", line=dict(color=INK, width=1.7))
     )
     fig.add_trace(
         go.Scatter(
             x=forecast.ds,
             y=forecast.point,
-            name="Coherent center",
-            line=dict(color=GREEN, width=2.5),
-            customdata=forecast[["q50"]].to_numpy(),
-            hovertemplate="Center %{y:,.2f}<br>Marginal P50 %{customdata[0]:,.2f}<extra></extra>",
+            name="Forecast (coherent center)",
+            line=dict(color=ACCENT, width=2.4, dash="dash"),
+            customdata=forecast[["q50", "q10", "q95"]].to_numpy(),
+            hovertemplate=(
+                "Center %{y:,.1f}<br>P50 %{customdata[0]:,.1f}"
+                "<br>P10–P95 %{customdata[1]:,.1f}–%{customdata[2]:,.1f}<extra></extra>"
+            ),
         )
     )
-    fig.add_shape(
-        type="line",
+    fig.add_vline(x=origin, line=dict(color="#a8a296", width=1))
+    fig.add_annotation(
+        x=origin,
+        y=1,
         xref="x",
         yref="paper",
-        x0=origin,
-        x1=origin,
-        y0=0,
-        y1=1,
-        line=dict(color=MUTED, width=1, dash="dot"),
+        text=f"As of {pd.Timestamp(origin):%b %d}",
+        showarrow=False,
+        xanchor="right",
+        yanchor="top",
+        xshift=-6,
+        font=dict(size=11, color=MUTED),
     )
-    theme(fig, 270)
+    theme(fig, 300)
     limits = np.concatenate(
         [observed.y.to_numpy(), forecast[["q10", "q95", "point"]].to_numpy().ravel()]
     )
     lower = max(0.0, float(limits.min()) * 0.95)
     upper = max(lower + 1.0, float(limits.max()) * 1.05)
-    fig.update_yaxes(title="Daily demand · units", range=[lower, upper])
+    fig.update_yaxes(title="Units per day", range=[lower, upper])
     return fig
+
+
+def forecast_summary(origin, observed, forecast):
+    """What this forecast says, in units. Point centers are coherent and add up;
+    quantiles do not, so no summed interval is shown."""
+    origin = pd.Timestamp(origin)
+    ahead = forecast.point.sum()
+    before = observed[(observed.ds > origin - pd.Timedelta(days=28)) & (observed.ds <= origin)]
+    previous = before.y.sum() if len(before) == 28 else np.nan
+    change = ahead / previous - 1 if previous and np.isfinite(previous) else np.nan
+    peak = forecast.loc[forecast.point.idxmax()] if len(forecast) else None
+    realized = observed[observed.ds > origin]
+    rows = [
+        ("Forecast, next 28 days", f"{units(ahead)} units", "Sum of daily coherent centers"),
+        ("Actual, previous 28 days", f"{units(previous)} units", None),
+        (
+            "Change",
+            "—" if not np.isfinite(change) else f"{change:+.1%}",
+            "Forecast against the previous 28 days",
+        ),
+        (
+            "Peak forecast day",
+            "—" if peak is None else f"{units(peak.point, 1)} units",
+            None if peak is None else f"{peak.ds:%a %b %d}",
+        ),
+    ]
+    if len(realized) == len(forecast) and len(realized):
+        merged = forecast.merge(realized, on="ds")
+        error = (merged.y - merged.point).abs().sum() / merged.y.sum() if merged.y.sum() else np.nan
+        rows.append(("Actual, these 28 days", f"{units(merged.y.sum())} units", "Holdout fold"))
+        rows.append(("WMAPE for this node", rate(error), "Absolute error over actual units"))
+    else:
+        rows.append(("Actual, these 28 days", "Not yet observed", "Latest origin has no outcome"))
+    return html.Dl(
+        [
+            html.Div(
+                [
+                    html.Dt(label),
+                    html.Dd(value, className="figure"),
+                    *([html.Dd(note, className="figure-note")] if note else []),
+                ],
+                className="summary-row",
+            )
+            for label, value, note in rows
+        ],
+        className="summary-list",
+    )
 
 
 def shap_figure(frame):
     if frame is None:
-        return empty_figure("No SHAP sample saved for this tuning fold.", 260)
+        return empty_figure("No explanation sample was saved for this tuning fold.", 260)
     names = {
         "rolling_mean_7": "Recent 7-day mean",
         "rolling_mean_14": "Recent 14-day mean",
@@ -133,30 +282,50 @@ def shap_figure(frame):
         go.Figure(
             go.Bar(
                 x=data.mean_absolute_shap,
-                y=[names.get(s, s.replace("_", " ")) for s in data.feature],
+                y=[names.get(s, s.replace("_", " ").capitalize()) for s in data.feature],
                 orientation="h",
-                marker_color=GREEN,
+                # Muted: explanatory, so it should not compete with the forecast.
+                marker_color="#8b9cb4",
                 hovertemplate="%{y}: %{x:.3f} units<extra></extra>",
             )
         ),
         260,
     )
-    fig.update_layout(margin=dict(l=140, r=20, t=10, b=40), hovermode="closest")
-    fig.update_xaxes(title="Mean |SHAP| · units", showgrid=True, gridcolor="rgba(32,51,46,.08)")
-    fig.update_yaxes(showgrid=False)
+    fig.update_layout(margin=dict(l=8, r=12, t=8, b=8), hovermode="closest", bargap=0.4)
+    fig.update_xaxes(title="Mean |SHAP|, units", showgrid=True, gridcolor=GRID, showline=False)
+    fig.update_yaxes(showgrid=False, tickfont=dict(color=INK_2))
     return fig
 
 
-def table(headers, rows, *, caption=None):
+def table(headers, rows, *, caption=None, numeric=None, highlight=None, scroll=True):
+    numeric = set(range(1, len(headers))) if numeric is None else set(numeric)
+    body = []
+    for index, row in enumerate(rows):
+        body.append(
+            html.Tr(
+                [
+                    html.Td(value, className="num" if col in numeric else None)
+                    for col, value in enumerate(row)
+                ],
+                className="row-highlight" if highlight == index else None,
+            )
+        )
     return html.Div(
         html.Table(
             [
                 *([html.Caption(caption)] if caption else []),
-                html.Thead(html.Tr([html.Th(h, scope="col") for h in headers])),
-                html.Tbody([html.Tr([html.Td(v) for v in row]) for row in rows]),
+                html.Thead(
+                    html.Tr(
+                        [
+                            html.Th(h, scope="col", className="num" if c in numeric else None)
+                            for c, h in enumerate(headers)
+                        ]
+                    )
+                ),
+                html.Tbody(body),
             ]
         ),
-        className="table-scroll",
+        className="table-scroll" if scroll else "table-wrap",
     )
 
 
@@ -165,60 +334,142 @@ def forecast_table(frame):
         ["Date", "Center", "P10", "P50", "P90", "P95"],
         [
             [
-                r.ds.strftime("%b %d, %Y"),
-                *[f"{getattr(r, c):,.2f}" for c in ["point", "q10", "q50", "q90", "q95"]],
+                r.ds.strftime("%a %b %d"),
+                *[f"{getattr(r, c):,.1f}" for c in ["point", "q10", "q50", "q90", "q95"]],
             ]
             for r in frame.itertuples()
         ],
-        caption="28 daily forecast observations",
+        caption="Units per day. Quantiles are marginal and do not add across the hierarchy.",
     )
+
+
+# ---------------------------------------------------------------- inventory
 
 
 def inventory_figure(trace):
     grouped = trace.groupby("ds", as_index=False)[["inventory", "arrivals"]].sum()
     fig = go.Figure(
-        go.Bar(x=grouped.ds, y=grouped.arrivals, name="Receipts", marker_color="#cbe8c5")
+        go.Bar(
+            x=grouped.ds,
+            y=grouped.arrivals,
+            name="Receipts",
+            marker_color=RECEIPTS,
+            hovertemplate="Receipts %{y:,.0f}<extra></extra>",
+        )
     )
     fig.add_trace(
         go.Scatter(
             x=grouped.ds,
             y=grouped.inventory,
-            name="Ending inventory",
-            line=dict(color=GREEN, width=2.3),
+            name="Ending stock",
+            line=dict(color=ACCENT, width=2.2),
+            hovertemplate="Ending stock %{y:,.0f}<extra></extra>",
         )
     )
-    theme(fig, 290)
-    fig.update_yaxes(title="Units", rangemode="tozero")
+    theme(fig, 250)
+    fig.update_layout(bargap=0.25)
+    fig.update_yaxes(title="Units, all stores", rangemode="tozero")
+    return fig
+
+
+def storage_figure(trace, storage):
+    """Daily end-of-day storage use against each store's capacity."""
+    if storage is None:
+        return None
+    joined = trace.merge(storage["catalog"], on="unique_id", validate="many_to_one")
+    joined["volume"] = joined.inventory * joined.unit_volume_m3
+    used = joined.groupby(["store_id", "ds"], as_index=False).volume.sum()
+    fig = go.Figure()
+    peak = 1.0
+    for index, (store, frame) in enumerate(used.groupby("store_id")):
+        capacity = storage["capacity"][store]
+        share = frame.volume / capacity
+        peak = max(peak, float(share.max()))
+        fig.add_trace(
+            go.Scatter(
+                x=frame.ds,
+                y=share,
+                name=store,
+                line=dict(
+                    color=STORE_COLOR[index % len(STORE_COLOR)],
+                    width=1.8,
+                    dash=STORE_DASH[index % len(STORE_DASH)],
+                ),
+                customdata=np.c_[frame.volume, np.full(len(frame), capacity)],
+                hovertemplate=(
+                    f"{store} %{{y:.0%}} · %{{customdata[0]:,.1f}} of "
+                    "%{customdata[1]:,.0f} m³<extra></extra>"
+                ),
+            )
+        )
+        over = frame[share > 1 + 1e-7]
+        if len(over):
+            fig.add_trace(
+                go.Scatter(
+                    x=over.ds,
+                    y=over.volume / capacity,
+                    mode="markers",
+                    marker=dict(symbol="triangle-up", size=10, color=ALERT),
+                    name=f"{store} over capacity",
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+    fig.add_hline(y=1, line=dict(color=ALERT, width=1.2))
+    fig.add_annotation(
+        x=0,
+        y=1,
+        xref="paper",
+        yref="y",
+        text="Capacity",
+        showarrow=False,
+        xanchor="left",
+        yanchor="bottom",
+        font=dict(size=11, color=ALERT),
+    )
+    theme(fig, 250)
+    fig.update_yaxes(title="Share of capacity", tickformat=".0%", range=[0, max(1.1, peak * 1.08)])
     return fig
 
 
 def tradeoff_figure(selected, saved, target, phase):
     """Display observed tradeoffs; a forecast floor is never a realized guarantee."""
-    fig = theme(go.Figure(), 320)
+    fig = theme(go.Figure(), 360)
     for row in selected.itertuples():
         fill = getattr(row, "minimum_store_fill_rate", row.fill_rate)
         if fill is None or not np.isfinite(fill):
             continue
         eligible = row.capacity_feasible and getattr(row, "service_feasible", True)
+        color, symbol, _ = policy_style(row.policy)
         fig.add_trace(
             go.Scatter(
                 x=[fill],
                 y=[row.total_cost],
+                # Shape and legend identify the policy; direct labels collided
+                # when baselines cluster, so they are left to the hover text.
                 mode="markers",
-                name=POLICY_LABELS.get(row.policy, row.policy),
-                marker=dict(size=11, symbol="circle" if eligible else "x"),
+                name=policy_label(row.policy),
+                marker=dict(
+                    size=12,
+                    color=color,
+                    symbol=symbol if eligible else f"{symbol}-open",
+                    line=dict(width=2, color=color),
+                ),
                 hovertemplate=(
-                    "%{fullData.name}<br>Lowest store fill: %{x:.2%}<br>Cost: $%{y:,.2f}"
-                    f"<br>{'Meets service and storage' if eligible else 'Fails service or storage'}"
-                    "<extra></extra>"
+                    "%{fullData.name}<br>Lowest store fill %{x:.2%}<br>Cost $%{y:,.2f}"
+                    + (
+                        "<br>✓ Meets service and storage"
+                        if eligible
+                        else "<br>✕ Fails service or storage"
+                    )
+                    + "<extra></extra>"
                 ),
             )
         )
     if saved is not None and len(saved):
         for good in [True, False]:
-            points = saved[saved.capacity_feasible & saved.service_feasible]
-            if not good:
-                points = saved[~(saved.capacity_feasible & saved.service_feasible)]
+            ok = saved.capacity_feasible & saved.service_feasible
+            points = saved[ok] if good else saved[~ok]
             if points.empty:
                 continue
             fig.add_trace(
@@ -226,36 +477,44 @@ def tradeoff_figure(selected, saved, target, phase):
                     x=points.minimum_store_fill_rate,
                     y=points.total_cost,
                     mode="markers",
-                    name="Saved service targets" if good else "Saved targets missed",
+                    name="Saved service targets" if good else "Saved targets that failed",
                     customdata=points[["minimum_fill_rate"]].to_numpy(),
-                    marker=dict(size=14, symbol="diamond" if good else "diamond-open", color=INK),
+                    marker=dict(
+                        size=11,
+                        symbol="star" if good else "star-open",
+                        color=MUTED,
+                        line=dict(width=1.5, color=MUTED),
+                    ),
                     hovertemplate=(
-                        "Planning target: %{customdata[0]:.0%}<br>Lowest store fill: %{x:.2%}"
-                        "<br>Cost: $%{y:,.2f}<extra></extra>"
+                        "Planning target %{customdata[0]:.0%}<br>Lowest store fill %{x:.2%}"
+                        "<br>Cost $%{y:,.2f}<extra></extra>"
                     ),
                 )
             )
     if target:
-        fig.add_vline(x=target, line_dash="dot", line_color=MUTED)
+        fig.add_vline(x=target, line=dict(color="#a8a296", width=1, dash="dot"))
+        fig.add_annotation(
+            x=target,
+            y=1,
+            xref="x",
+            yref="paper",
+            text=f"{target:.0%} target",
+            showarrow=False,
+            xanchor="right",
+            yanchor="top",
+            xshift=-4,
+            font=dict(size=11, color=MUTED),
+        )
     fig.update_layout(
         hovermode="closest",
         showlegend=True,
-        legend=dict(orientation="h", y=-0.32, x=0, xanchor="left"),
-        margin=dict(l=65, r=20, t=15, b=110),
-        height=420,
+        legend=dict(orientation="h", y=-0.2, yanchor="top", x=0, xanchor="left"),
+        margin=dict(l=8, r=12, t=12, b=8),
     )
     prefix = "Realized" if phase == "holdout" else "Projected"
-    fig.update_xaxes(title=f"{prefix} lowest store fill rate", tickformat=".0%", range=[0, 1.02])
-    fig.update_yaxes(title="Total scenario cost · USD", rangemode="tozero")
+    fig.update_xaxes(title=f"{prefix} lowest store fill rate", tickformat=".0%", range=[0, 1.04])
+    fig.update_yaxes(title="Total cost, USD", rangemode="tozero", tickprefix="$")
     return fig
-
-
-def money(value):
-    return "—" if value is None or not np.isfinite(value) else f"${value:,.2f}"
-
-
-def rate(value):
-    return "N/A" if value is None or not np.isfinite(value) else f"{value:.2%}"
 
 
 def result_view(result, phase, scope):
@@ -269,41 +528,78 @@ def result_view(result, phase, scope):
     trace = trace[trace.evaluation.eq(evaluation) & trace.policy.eq(MILP)]
     dates = sorted(trace.ds.unique())[:days]
     trace = trace[trace.ds.isin(dates)]
-    columns = [
-        "Policy",
-        "Total cost",
-        "Fill rate" if phase == "holdout" else "Projected fulfillment",
-        "Storage",
-        "Lowest store fill",
-        "Service target",
-    ]
-    comparison = table(
-        columns,
-        [
+    ordered = selected.assign(
+        _eligible=selected.capacity_feasible
+        & selected.get("service_feasible", pd.Series(True, index=selected.index)),
+        _plan=selected.policy.eq(MILP),
+    ).sort_values(["_plan", "_eligible", "total_cost"], ascending=[False, False, True])
+    rows = []
+    for r in ordered.itertuples():
+        over = getattr(r, "max_capacity_violation_m3", np.nan)
+        delta = r.total_cost / primary.total_cost - 1 if primary.total_cost else np.nan
+        rows.append(
             [
-                POLICY_LABELS.get(r.policy, r.policy),
+                html.Span(
+                    [
+                        html.Span(
+                            GLYPH.get(policy_style(r.policy)[1], "●"),
+                            className="policy-key",
+                            style={"color": policy_style(r.policy)[0]},
+                            **{"aria-hidden": "true"},
+                        ),
+                        policy_label(r.policy),
+                    ],
+                    className="policy-name",
+                ),
                 money(r.total_cost),
+                "Plan"
+                if r.policy == MILP
+                else ("—" if not np.isfinite(delta) else f"{delta:+.0%}"),
                 rate(r.fill_rate),
-                "Within limit" if r.capacity_feasible else "Exceeds capacity",
                 rate(getattr(r, "minimum_store_fill_rate", r.fill_rate)),
-                "Met" if getattr(r, "service_feasible", True) else "Missed",
+                status(
+                    bool(r.capacity_feasible),
+                    "Within limit",
+                    f"Exceeds capacity +{over:,.1f} m³"
+                    if np.isfinite(over)
+                    else "Exceeds capacity",
+                ),
+                status(bool(getattr(r, "service_feasible", True)), "Met", "Missed"),
             ]
-            for r in selected.itertuples()
+        )
+    comparison = table(
+        [
+            "Policy",
+            "Total cost",
+            "vs plan",
+            "Fill rate" if phase == "holdout" else "Projected fulfillment",
+            "Lowest store",
+            "Storage",
+            "Service target",
         ],
+        rows,
+        numeric={1, 2, 3, 4},
+        highlight=0,
+        scroll=False,
     )
     breakdown = table(
         ["Cost component", "USD"],
         [
             ["Holding", money(primary.holding_cost)],
-            ["Stockouts", money(primary.stockout_cost)],
+            ["Stockout penalties", money(primary.stockout_cost)],
             ["Ordering fees", money(primary.fixed_order_cost)],
+            [html.Strong("Total"), html.Strong(money(primary.total_cost))],
         ],
+        scroll=False,
     )
     solver = table(
         ["Measure", "Result"],
         [
             ["Certified gap", rate(result["gap"])],
-            ["Capacity", "Within limit" if primary.capacity_feasible else "Exceeds capacity"],
+            [
+                "Capacity",
+                status(bool(primary.capacity_feasible), "Within limit", "Exceeds capacity"),
+            ],
             ["Decision horizon", "28 days"],
             ["Tail", f"{result['manifest']['config']['tail_days']} days"],
             ["Minimum store fill target", rate(target)],
@@ -312,6 +608,7 @@ def result_view(result, phase, scope):
                 f"{result['manifest']['config'].get('shortage_penalty_multiplier', 1):g}x",
             ],
         ],
+        scroll=False,
     )
     warning = []
     if primary.order_count == 0:
@@ -347,60 +644,136 @@ def result_view(result, phase, scope):
             primary.capacity_feasible and getattr(primary, "service_feasible", True)
         ),
         "figure": inventory_figure(trace),
+        "storage": storage_figure(trace, result.get("storage")),
         "comparison": comparison,
         "tradeoff": tradeoff_figure(selected, result.get("tradeoff"), target, phase),
         "breakdown": breakdown,
         "solver": solver,
         "warning": " ".join(warning),
+        "warnings": warning,
+        "target": target,
         "fill_label": "Realized fill rate" if phase == "holdout" else "Projected fulfillment",
-        "caption": "Holdout realized demand"
+        "caption": "Holdout, realized demand"
         if phase == "holdout"
-        else "Latest forecast-demand scenario",
+        else "Latest origin, forecast demand",
     }
 
 
-def kpi(label, value):
+def section(title, body, note=None, aside=None, className=""):
+    return html.Section(
+        [
+            html.Div(
+                [
+                    html.H2(title),
+                    *([html.Span(note, className="section-note")] if note else []),
+                    *([aside] if aside is not None else []),
+                ],
+                className="section-head",
+            ),
+            body,
+        ],
+        className=f"sheet-section {className}".strip(),
+    )
+
+
+def decision(verdict, reason, tone, figures, action):
     return html.Div(
-        [html.Div(label, className="metric-label"), html.Div(value, className="metric-value")],
-        className="metric",
+        [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span(
+                                "✓" if tone == "ok" else "✕" if tone == "hold" else "·",
+                                className="verdict-mark",
+                                **{"aria-hidden": "true"},
+                            ),
+                            html.Span(verdict, className="verdict-text"),
+                        ],
+                        className="verdict-line",
+                    ),
+                    html.P(reason, className="verdict-reason"),
+                ],
+                className=f"verdict verdict-{tone}",
+            ),
+            figures,
+            action,
+        ],
+        className="decision",
+    )
+
+
+def download_action(disabled, note):
+    return html.Div(
+        [
+            html.Button(
+                "Download orders",
+                id="download-orders",
+                disabled=disabled,
+                className="button button-primary",
+            ),
+            html.Div(note, className="action-note"),
+        ],
+        className="decision-action",
+    )
+
+
+def headline_figures(cost, cost_label, rows):
+    return html.Div(
+        [
+            html.Div(
+                [html.Div(cost_label, className="hero-label"), html.Div(cost, className="hero")],
+                className="hero-block",
+            ),
+            html.Dl(
+                [
+                    html.Div(
+                        [
+                            html.Dt(label),
+                            html.Dd(value, className="figure"),
+                            *([html.Dd(note, className="figure-note")] if note else []),
+                        ],
+                        className="fact",
+                    )
+                    for label, value, note in rows
+                ],
+                className="fact-list",
+            ),
+        ],
+        className="decision-figures",
     )
 
 
 def blank_results(message, failed=False):
     return html.Div(
         [
-            html.Div(
-                [
-                    kpi("Total cost", "—"),
-                    kpi("Fill rate", "—"),
-                    kpi("Avg inventory value", "—"),
-                    html.Div(
-                        [
-                            html.Button(
-                                "Download orders",
-                                id="download-orders",
-                                disabled=True,
-                                className="button",
-                            ),
-                            html.Div("No current result", className="muted"),
-                        ],
-                        className="metric order-metric",
-                    ),
-                ],
-                className="metrics-band panel",
+            decision(
+                "Scenario failed" if failed else "No plan for these settings",
+                message,
+                "hold" if failed else "idle",
+                headline_figures(
+                    "—",
+                    "Total cost",
+                    [
+                        ("Fill rate", "—", None),
+                        ("Avg inventory value", "—", None),
+                        ("Orders", "—", None),
+                    ],
+                ),
+                download_action(True, "No current result"),
             ),
-            html.Div(message, className="notice error" if failed else "notice", role="status"),
             html.Div(
                 [
-                    html.H2("Inventory and receipts"),
-                    dcc.Graph(
-                        figure=empty_figure("Run a scenario to calculate the inventory plan."),
-                        responsive=True,
-                        style={"height": "320px", "width": "100%"},
-                        config={"displayModeBar": False, "responsive": True},
+                    html.Div(
+                        "Storage headroom, stock and policy comparison", className="empty-title"
+                    ),
+                    html.Div(
+                        "They appear here once the optimizer has a plan for these settings. "
+                        "Run it from the scenario panel.",
+                        className="empty-text",
                     ),
                 ],
-                className="panel",
+                className="empty-state",
             ),
         ],
         className="result-stack",
@@ -410,80 +783,144 @@ def blank_results(message, failed=False):
 def scenario_results(result, phase, scope):
     view = result_view(result, phase, scope)
     r = view["primary"]
+    service_ok = bool(getattr(r, "service_feasible", True))
+    lowest = getattr(r, "minimum_store_fill_rate", r.fill_rate)
+    over = getattr(r, "max_capacity_violation_m3", np.nan)
+    window = "28-day window" if scope == "decision_window" else "42 days incl. tail"
+    reasons = []
+    if not service_ok:
+        reasons.append(
+            f"misses the {rate(view['target'])} fill target (lowest store {rate(lowest)})"
+        )
+    if not r.capacity_feasible:
+        reasons.append(
+            f"exceeds storage by up to {over:,.1f} m³" if np.isfinite(over) else "exceeds storage"
+        )
+    if view["downloadable"]:
+        verdict, tone = "Ready to release", "ok"
+        reason = (
+            f"Every store meets the {rate(view['target'])} fill target and stock stays within "
+            f"storage over the {window}."
+        )
+        if phase == "latest":
+            reason += " Projected on forecast demand; actual outcomes are not yet known."
+    else:
+        verdict, tone = "Hold: do not release", "hold"
+        reason = "This plan " + " and ".join(reasons) + f" over the {window}."
+    orders = result.get("orders")
+    value = (
+        orders.purchase_value.sum()
+        if orders is not None and "purchase_value" in orders and len(orders)
+        else 0.0
+    )
+    figures = headline_figures(
+        money(r.total_cost),
+        f"Total cost · {window}",
+        [
+            (view["fill_label"], rate(r.fill_rate), f"Lowest store {rate(lowest)}"),
+            ("Avg inventory value", money(r.average_inventory_value), "Mean daily stock at cost"),
+            ("Orders", f"{int(r.order_count):,}", f"{money(value)} purchase value"),
+        ],
+    )
+    storage = (
+        dcc.Graph(
+            figure=view["storage"],
+            responsive=True,
+            config=GRAPH,
+            className="chart",
+            style={"height": "260px"},
+        )
+        if view["storage"] is not None
+        else html.Div(
+            "Storage detail is unavailable: this result does not reference verifiable "
+            "scenario files.",
+            className="empty-text inline-empty",
+        )
+    )
     return html.Div(
         [
-            html.Div(
-                [
-                    kpi("Total cost", money(r.total_cost)),
-                    kpi(view["fill_label"], rate(r.fill_rate)),
-                    kpi("Avg inventory value", money(r.average_inventory_value)),
-                    html.Div(
-                        [
-                            html.Button(
-                                "Download orders",
-                                id="download-orders",
-                                disabled=not view["downloadable"],
-                                className="button",
-                            ),
-                            html.Div(f"{int(r.order_count):,} orders", className="muted"),
-                        ],
-                        className="metric order-metric",
-                    ),
-                ],
-                className="metrics-band panel",
+            decision(
+                verdict,
+                reason,
+                tone,
+                figures,
+                download_action(not view["downloadable"], "Purchase-order CSV for the plan"),
             ),
             *(
-                [html.Div(view["warning"], className="notice warning", role="status")]
-                if view["warning"]
+                [
+                    html.Ul(
+                        [html.Li(text) for text in view["warnings"]],
+                        className="notes",
+                        role="status",
+                    )
+                ]
+                if view["warnings"]
                 else []
             ),
             html.Div(
                 [
-                    html.H2("Inventory and receipts"),
-                    dcc.Graph(
-                        figure=view["figure"],
-                        responsive=True,
-                        style={"height": "290px", "width": "100%"},
-                        config={"displayModeBar": False, "responsive": True},
+                    section(
+                        "Storage headroom",
+                        storage,
+                        "End-of-day volume as a share of each store's capacity",
                     ),
-                    html.Div(view["caption"], className="chart-caption"),
+                    section(
+                        "Stock and receipts",
+                        dcc.Graph(
+                            figure=view["figure"],
+                            responsive=True,
+                            config=GRAPH,
+                            className="chart",
+                            style={"height": "260px"},
+                        ),
+                        view["caption"],
+                    ),
                 ],
-                className="panel",
+                className="pair",
+            ),
+            section(
+                "Policy comparison",
+                view["comparison"],
+                "Same inventory, receipts, capacity and economics for every policy",
             ),
             html.Div(
                 [
-                    html.Div([html.H2("Cost breakdown"), view["breakdown"]], className="panel"),
-                    html.Div([html.H2("Solver summary"), view["solver"]], className="panel"),
+                    section(
+                        "Cost against service",
+                        html.Div(
+                            [
+                                dcc.Graph(
+                                    figure=view["tradeoff"],
+                                    responsive=True,
+                                    config=GRAPH,
+                                    style={"height": "380px"},
+                                ),
+                                html.P(
+                                    "Filled markers meet the service target and storage; open "
+                                    "markers fail at least one. Stars are saved service targets "
+                                    "under the same economics and capacity. Costs exclude "
+                                    "purchase cost.",
+                                    className="chart-caption",
+                                ),
+                            ]
+                        ),
+                    ),
+                    html.Div(
+                        [
+                            section("Cost breakdown", view["breakdown"], "Optimizer plan"),
+                            section("Solver", view["solver"], "HiGHS MILP"),
+                        ],
+                        className="stack",
+                    ),
                 ],
-                className="result-pair",
+                className="pair pair-wide",
             ),
-            html.Div([html.H2("Policy comparison"), view["comparison"]], className="panel"),
             html.Div(
                 [
-                    html.H2("Cost and service tradeoff"),
-                    dcc.Graph(
-                        figure=view["tradeoff"],
-                        responsive=True,
-                        config={"displayModeBar": False, "responsive": True},
-                    ),
-                    html.P(
-                        "Circles meet the selected service and storage limits; crosses fail "
-                        "at least one. Diamonds show saved service targets under the same "
-                        "economics and capacity. Costs include holding, shortages and fixed "
-                        "ordering fees; purchase cost is excluded.",
-                        className="chart-caption",
-                    ),
-                    html.P(
-                        "Synthetic scenario economics. Historical results are exploratory; "
-                        "validate a chosen policy on a new period before deployment.",
-                        className="chart-caption",
-                    ),
+                    "Result ",
+                    html.Code(result["manifest"]["run_id"]),
+                    " · synthetic economics · historical results are exploratory.",
                 ],
-                className="panel",
-            ),
-            html.Div(
-                f"Result {result['manifest']['run_id']} · "
-                "Same inventory, receipts and economics across policies.",
                 className="source-line",
             ),
         ],

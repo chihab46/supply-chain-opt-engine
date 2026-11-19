@@ -18,7 +18,7 @@ Complete pipeline steps 1 through 6 first. With missing or invalid source data,
 the app shows an actionable empty state rather than fabricated sample results.
 Restart the application after producing a new forecast snapshot.
 
-## Forecast explorer
+## Demand forecast
 
 The explorer opens on the latest saved origin. All four historical folds are
 also available. Select a store, then a category, then an item. Selecting a higher
@@ -65,7 +65,7 @@ slider events and validates each position before mapping it to a quantile.
 
 Press **Run optimizer** to submit a background scenario. Status progresses through
 pending, running, completed or failed. Controls and duplicate submissions are
-disabled while the matching job is active. The forecast explorer remains usable.
+disabled while the matching job is active. The demand forecast view remains usable.
 A one-second poll reads persisted job status; it does not repeatedly redraw an
 unchanged result.
 
@@ -82,10 +82,17 @@ lead-time convention, initial stock, pipeline, capacity and terminal treatment.
 
 ## Results and exports
 
-The four main positions show total cost, fulfillment, average daily inventory
-value, and purchase-order download with the number of new orders. Supporting
-views show inventory and receipt trajectories, cost components, certified solver
-gap, storage feasibility and policy comparisons.
+The result opens with the **release decision**: "Ready to release" or "Hold: do
+not release" with the reason in words, for example the largest storage excess in
+m³ or the lowest store's fill against the target. Below it are the total cost,
+fill rate with the lowest store, average inventory value, the order count with
+its purchase value, and the purchase-order download.
+
+**Storage headroom** plots each store's end-of-day volume as a share of its
+capacity, with overflow days marked. It reads item volumes and store capacities
+from the result's checksummed scenario files and says so when a result has none.
+Further views show stock and receipts, the policy comparison, cost against
+service, cost components and the solver gap.
 
 Historical holdout results are labeled **Realized fill rate**. Latest-origin
 results are labeled **Projected fulfillment** and explicitly describe a
@@ -101,8 +108,9 @@ for the affected reporting window.
 
 The policy table shows the lowest store fill rate and whether the service target
 was met. The cost–service scatter plots those store minima against total scenario
-cost, with a dotted service target. Crosses mark policies that miss service or
-storage requirements. Diamonds show saved MILP service targets only when the
+cost, with a dotted service target. Each policy keeps one marker shape in the
+chart and the table key; filled markers pass service and storage, open markers
+fail one. Stars show saved MILP service targets only when the
 remaining settings and forecast snapshot match. Changing penalty, capacity or
 lead time does not mix incomparable scenarios. The command in
 [inventory documentation](optimization.md) generates the service sensitivity grid.
@@ -211,3 +219,22 @@ The final visual pass used the concepts' 1487×1058 desktop canvas and a 390×84
 mobile viewport. The earlier full functional run also covered 1440×1000. Both
 concepts and final screenshots were inspected directly; no material layout
 mismatch remained after the measured-canvas correction and mobile cleanup.
+
+## Visual system
+
+The dashboard uses a planning-sheet style: paper background, white sheets with
+hairline rules, tabular figures and monospace identifiers. Tokens live at the
+top of `app/assets/dashboard.css`; chart colours mirror them in
+`app/presentation.py`.
+
+- Dispatch blue marks the plan and forecasts; ink marks actual sales.
+- Vermillion is reserved for exceptions: storage breaches, missed targets and
+  the hold decision.
+- No state relies on colour alone. Statuses read "✓ Within limit" or
+  "✕ Exceeds capacity +57.3 m³"; policies differ by marker shape; stores differ
+  by line style; the forecast line is dashed. The palette avoids green–yellow
+  pairs.
+- Missing values are not shown as zero: an unobserved outcome reads "Not yet
+  observed", undefined rates read "N/A".
+- Keyboard focus shows a 2px accent outline; animation stops under
+  `prefers-reduced-motion`.

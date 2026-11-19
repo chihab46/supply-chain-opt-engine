@@ -205,6 +205,35 @@ class DashboardRepository:
             .sort_values("minimum_fill_rate")
         )
 
+    def storage(self, document, phase):
+        """Item volumes and store capacities from the result's checksummed scenario.
+
+        Returns None when the bundle does not reference verifiable scenario files,
+        so the view can say storage detail is unavailable rather than guess.
+        """
+        directory = document.get("scenario_directory")
+        digest = document.get("scenario_manifest_sha256", {}).get(phase)
+        if not directory or not digest:
+            return None
+        scenario = (self.root / directory / phase).resolve()
+        if not scenario.is_relative_to((self.root / "data/synthetic").resolve()):
+            return None
+        path = scenario / "manifest.json"
+        if not path.is_file() or checksum(path) != digest:
+            return None
+        manifest = json.loads(path.read_text())
+        for name in ["catalog.csv", "store_capacity.csv"]:
+            if checksum(scenario / name) != manifest["artifact_sha256"].get(name):
+                return None
+        catalog = pd.read_csv(
+            scenario / "catalog.csv", usecols=["unique_id", "store_id", "unit_volume_m3"]
+        )
+        capacity = pd.read_csv(scenario / "store_capacity.csv")
+        return {
+            "catalog": catalog,
+            "capacity": dict(zip(capacity.store_id, capacity.capacity_m3, strict=True)),
+        }
+
     def result(self, manifest_path, phase):
         path = Path(manifest_path).resolve()
         allowed = (self.root / "artifacts/orders").resolve()
@@ -243,6 +272,7 @@ class DashboardRepository:
             "metrics": metrics,
             "trace": trace,
             "orders": orders,
+            "storage": self.storage(document, phase),
             "gap": (
                 max(0.0, total - lower) / max(abs(total), 1e-10) if lower is not None else None
             ),

@@ -18,6 +18,7 @@ from app.presentation import (
     blank_results,
     empty_figure,
     forecast_figure,
+    forecast_summary,
     forecast_table,
     result_view,
     scenario_results,
@@ -72,8 +73,31 @@ def config_from_project(root):
     return OptimizationConfig(**opts, seed=doc["seed"])
 
 
+def head(title, note=None, id=None):
+    heading = html.H2(title, id=id) if id else html.H2(title)
+    return html.Div(
+        [heading, *([html.Span(note, className="section-note")] if note else [])],
+        className="section-head",
+    )
+
+
+def slider_field(label, id, value_id, value_text, slider):
+    return html.Div(
+        [
+            html.Label(
+                [label, html.Span(value_text, id=value_id, className="slider-value")],
+                htmlFor=id,
+                className="field-label",
+            ),
+            slider,
+        ],
+        className="slider-field",
+    )
+
+
 def layout(repository, defaults=None):
     defaults = defaults or OptimizationConfig()
+    stores = sorted(repository.leaves.store_id.unique())
     return html.Div(
         [
             dcc.Store(id="job-id", storage_type="session"),
@@ -83,10 +107,40 @@ def layout(repository, defaults=None):
             html.Header(
                 html.Div(
                     [
-                        html.Div("Supply Chain Engine", className="brand"),
                         html.Div(
-                            f"{len(repository.leaves):,} store-item series / California",
-                            className="header-meta",
+                            [
+                                html.Span("Supply Chain Engine", className="wordmark"),
+                                html.Span("Replenishment planning", className="wordmark-sub"),
+                            ],
+                            className="brand",
+                        ),
+                        dcc.Tabs(
+                            id="workspace-tab",
+                            value="forecast",
+                            className="workspace-tabs",
+                            parent_className="workspace-tabs-parent",
+                            children=[
+                                dcc.Tab(
+                                    label="Demand forecast",
+                                    value="forecast",
+                                    className="workspace-tab",
+                                    selected_className="workspace-tab-selected",
+                                ),
+                                dcc.Tab(
+                                    label="Replenishment simulator",
+                                    value="scenario",
+                                    className="workspace-tab",
+                                    selected_className="workspace-tab-selected",
+                                ),
+                            ],
+                        ),
+                        html.Div(
+                            [
+                                "Walmart M5 · ",
+                                html.Span(" ".join(stores), className="mono"),
+                                f" · {len(repository.leaves):,} store-items · synthetic costs",
+                            ],
+                            className="dataset",
                         ),
                     ],
                     className="header-inner",
@@ -95,115 +149,120 @@ def layout(repository, defaults=None):
             ),
             html.Main(
                 [
-                    dcc.Tabs(
-                        id="workspace-tab",
-                        value="forecast",
-                        className="workspace-tabs",
-                        children=[
-                            dcc.Tab(
-                                label="Forecast explorer",
-                                value="forecast",
-                                className="workspace-tab",
-                                selected_className="workspace-tab-selected",
-                            ),
-                            dcc.Tab(
-                                label="Replenishment simulator",
-                                value="scenario",
-                                className="workspace-tab",
-                                selected_className="workspace-tab-selected",
-                            ),
-                        ],
-                    ),
                     html.Section(
                         [
                             html.Div(
                                 [
-                                    html.H1("Forecast explorer"),
-                                    html.P("Trace demand from store totals to individual items."),
-                                ],
-                                className="view-heading",
-                            ),
-                            html.Div(
-                                [
-                                    field(
-                                        "Forecast origin",
-                                        dropdown(
-                                            "forecast-origin",
-                                            [
-                                                {"label": v, "value": k}
-                                                for k, v in repository.origin_labels.items()
-                                            ],
-                                            "latest",
-                                        ),
-                                    ),
-                                    field(
-                                        "Store",
-                                        dropdown(
-                                            "store-filter",
-                                            [
-                                                {"label": "All stores", "value": ALL},
-                                                *[
-                                                    {"label": s, "value": s}
-                                                    for s in sorted(
-                                                        repository.leaves.store_id.unique()
-                                                    )
-                                                ],
-                                            ],
-                                            ALL,
-                                        ),
-                                    ),
-                                    field(
-                                        "Category",
-                                        dropdown(
-                                            "category-filter",
-                                            [{"label": "All categories", "value": ALL}],
-                                            ALL,
-                                            disabled=True,
-                                        ),
-                                    ),
-                                    field(
-                                        "Item",
-                                        dropdown(
-                                            "item-filter",
-                                            [{"label": "All items", "value": ALL}],
-                                            ALL,
-                                            disabled=True,
-                                        ),
+                                    html.H1("Demand forecast"),
+                                    html.P(
+                                        "Expected daily sales for every store, category and item, "
+                                        "with reconciled uncertainty bands."
                                     ),
                                 ],
-                                className="filters",
-                            ),
-                            html.Div(
-                                [
-                                    html.H2("Total demand", id="forecast-title"),
-                                    dcc.Graph(
-                                        id="forecast-chart",
-                                        responsive=True,
-                                        style={"height": "270px", "width": "100%"},
-                                        figure=empty_figure("Loading saved forecasts."),
-                                        config=GRAPH_CONFIG,
-                                    ),
-                                    html.Div(
-                                        "Point forecasts and joint paths add across the hierarchy. "
-                                        "Marginal quantiles need not add.",
-                                        className="chart-caption",
-                                    ),
-                                    html.Div(
-                                        "Shaded range P10–P95 has nominal coverage of 85%.",
-                                        className="chart-caption",
-                                    ),
-                                ],
-                                className="panel forecast-main",
+                                className="page-head",
                             ),
                             html.Div(
                                 [
                                     html.Div(
-                                        [html.H2("28-day forecast"), html.Div(id="forecast-table")],
-                                        className="panel",
+                                        [
+                                            field(
+                                                "As of",
+                                                dropdown(
+                                                    "forecast-origin",
+                                                    [
+                                                        {"label": v, "value": k}
+                                                        for k, v in repository.origin_labels.items()
+                                                    ],
+                                                    "latest",
+                                                ),
+                                            ),
+                                            html.Div(className="filter-divider"),
+                                            field(
+                                                "Store",
+                                                dropdown(
+                                                    "store-filter",
+                                                    [
+                                                        {"label": "All stores", "value": ALL},
+                                                        *[{"label": s, "value": s} for s in stores],
+                                                    ],
+                                                    ALL,
+                                                ),
+                                            ),
+                                            field(
+                                                "Category",
+                                                dropdown(
+                                                    "category-filter",
+                                                    [{"label": "All categories", "value": ALL}],
+                                                    ALL,
+                                                    disabled=True,
+                                                ),
+                                            ),
+                                            field(
+                                                "Item",
+                                                dropdown(
+                                                    "item-filter",
+                                                    [{"label": "All items", "value": ALL}],
+                                                    ALL,
+                                                    disabled=True,
+                                                ),
+                                            ),
+                                        ],
+                                        className="filter-bar",
                                     ),
                                     html.Div(
                                         [
-                                            html.H2("What drives the median model"),
+                                            html.Div(
+                                                [
+                                                    head(
+                                                        "Total demand",
+                                                        "Units per day · 42 days of history "
+                                                        "and a 28-day forecast",
+                                                        id="forecast-title",
+                                                    ),
+                                                    dcc.Graph(
+                                                        id="forecast-chart",
+                                                        responsive=True,
+                                                        style={"height": "300px", "width": "100%"},
+                                                        figure=empty_figure(
+                                                            "Loading saved forecasts.", 300
+                                                        ),
+                                                        config=GRAPH_CONFIG,
+                                                    ),
+                                                    html.P(
+                                                        "Shaded bands are P10–P95 (nominal 85% "
+                                                        "coverage) and P10–P90. Point forecasts "
+                                                        "add across the hierarchy; marginal "
+                                                        "quantiles do not.",
+                                                        className="chart-caption",
+                                                    ),
+                                                ],
+                                                className="chart-main",
+                                            ),
+                                            html.Aside(
+                                                [
+                                                    html.H2("Reading this forecast"),
+                                                    html.Div(id="forecast-summary"),
+                                                ],
+                                                className="summary-rail",
+                                            ),
+                                        ],
+                                        className="forecast-grid",
+                                    ),
+                                ],
+                                className="sheet",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            head("Daily forecast", "Next 28 days"),
+                                            html.Div(id="forecast-table"),
+                                        ],
+                                        className="sheet sheet-pad",
+                                    ),
+                                    html.Div(
+                                        [
+                                            head("Model drivers", "Median model, all series"),
                                             dcc.Graph(
                                                 id="shap-chart",
                                                 responsive=True,
@@ -215,10 +274,10 @@ def layout(repository, defaults=None):
                                             ),
                                             html.Div(id="shap-note", className="chart-caption"),
                                         ],
-                                        className="panel",
+                                        className="sheet sheet-pad",
                                     ),
                                 ],
-                                className="forecast-lower",
+                                className="pair",
                             ),
                             html.Div(id="forecast-source", className="source-line"),
                         ],
@@ -227,153 +286,158 @@ def layout(repository, defaults=None):
                     html.Section(
                         [
                             html.Div(
-                                [
-                                    html.H1("Replenishment simulator"),
-                                    html.P(SIMULATOR_SUBTITLE),
-                                ],
-                                className="view-heading",
+                                [html.H1("Replenishment simulator"), html.P(SIMULATOR_SUBTITLE)],
+                                className="page-head",
                             ),
                             html.Div(
                                 [
                                     html.Aside(
                                         [
-                                            field(
-                                                "Evaluation window",
-                                                dropdown(
-                                                    "scenario-phase",
-                                                    [
-                                                        {"label": v, "value": k}
-                                                        for k, v in repository.phase_labels.items()
-                                                    ],
-                                                    "holdout",
-                                                ),
-                                            ),
-                                            field(
-                                                "Minimum store fill rate",
-                                                dcc.Input(
-                                                    id="scenario-service",
-                                                    type="number",
-                                                    min=0,
-                                                    max=100,
-                                                    step=1,
-                                                    value=defaults.minimum_fill_rate * 100,
-                                                    className="scenario-number",
-                                                ),
-                                            ),
-                                            html.P(
-                                                "Required on forecast demand for each store over "
-                                                "28 days and the complete window. Actual service "
-                                                "can differ. Use 0% for cost-only planning.",
-                                                className="control-note",
-                                            ),
-                                            field(
-                                                "Shortage penalty multiplier",
-                                                dcc.Input(
-                                                    id="scenario-penalty",
-                                                    type="number",
-                                                    min=0.01,
-                                                    step=0.1,
-                                                    value=defaults.shortage_penalty_multiplier,
-                                                    className="scenario-number",
-                                                ),
-                                            ),
-                                            html.P(
-                                                "Costs, starting stock and capacity are synthetic "
-                                                "scenario assumptions, not Walmart operating data.",
-                                                className="control-note",
-                                            ),
-                                            html.Div(
+                                            html.Fieldset(
                                                 [
-                                                    html.Label(
-                                                        "Demand quantile",
-                                                        htmlFor="scenario-quantile",
-                                                        className="field-label",
+                                                    html.Legend("Scenario"),
+                                                    field(
+                                                        "Evaluation window",
+                                                        dropdown(
+                                                            "scenario-phase",
+                                                            [
+                                                                {"label": v, "value": k}
+                                                                for k, v in (
+                                                                    repository.phase_labels.items()
+                                                                )
+                                                            ],
+                                                            "holdout",
+                                                        ),
                                                     ),
-                                                    dcc.Slider(
-                                                        id="scenario-quantile",
-                                                        min=0,
-                                                        max=5,
-                                                        step=1,
-                                                        marks={
-                                                            i: f"P{round(q * 100):02}"
-                                                            for i, q in enumerate(QUANTILE_CHOICES)
-                                                        },
-                                                        value=4,
-                                                        included=False,
-                                                    ),
-                                                ],
-                                                className="slider-field",
-                                            ),
-                                            html.Div(
-                                                [
-                                                    html.Label(
+                                                    html.Div(
                                                         [
-                                                            "Store capacity",
-                                                            html.Span(
-                                                                "100%",
-                                                                id="capacity-value",
-                                                                className="slider-value",
+                                                            html.Label(
+                                                                "Demand quantile",
+                                                                htmlFor="scenario-quantile",
+                                                                className="field-label",
+                                                            ),
+                                                            dcc.Slider(
+                                                                id="scenario-quantile",
+                                                                min=0,
+                                                                max=5,
+                                                                step=1,
+                                                                marks={
+                                                                    i: f"P{round(q * 100):02}"
+                                                                    for i, q in enumerate(
+                                                                        QUANTILE_CHOICES
+                                                                    )
+                                                                },
+                                                                value=4,
+                                                                included=False,
+                                                            ),
+                                                            html.P(
+                                                                QUANTILE_NOTE,
+                                                                id="quantile-note",
+                                                                className="control-note",
                                                             ),
                                                         ],
-                                                        htmlFor="scenario-capacity",
-                                                        className="field-label",
+                                                        className="slider-field",
                                                     ),
-                                                    dcc.Slider(
-                                                        id="scenario-capacity",
-                                                        min=10,
-                                                        max=150,
-                                                        step=5,
-                                                        marks={
-                                                            v: f"{v}%" for v in [10, 50, 100, 150]
-                                                        },
-                                                        value=100,
+                                                ]
+                                            ),
+                                            html.Fieldset(
+                                                [
+                                                    html.Legend("Service policy"),
+                                                    field(
+                                                        "Minimum store fill rate, %",
+                                                        dcc.Input(
+                                                            id="scenario-service",
+                                                            type="number",
+                                                            min=0,
+                                                            max=100,
+                                                            step=1,
+                                                            value=defaults.minimum_fill_rate * 100,
+                                                            className="scenario-number",
+                                                        ),
                                                     ),
-                                                ],
-                                                className="slider-field",
+                                                    html.P(
+                                                        "Required on forecast demand in every "
+                                                        "store, over 28 days and the full window. "
+                                                        "Actual service can differ. 0% plans on "
+                                                        "cost alone.",
+                                                        className="control-note",
+                                                    ),
+                                                    field(
+                                                        "Shortage penalty multiplier",
+                                                        dcc.Input(
+                                                            id="scenario-penalty",
+                                                            type="number",
+                                                            min=0.01,
+                                                            # "any": with min 0.01, step 0.1 made
+                                                            # the default 1 an invalid value.
+                                                            step="any",
+                                                            value=(
+                                                                defaults.shortage_penalty_multiplier
+                                                            ),
+                                                            className="scenario-number",
+                                                        ),
+                                                    ),
+                                                    html.P(
+                                                        "Costs, starting stock and capacity are "
+                                                        "synthetic assumptions, not Walmart data.",
+                                                        className="control-note",
+                                                    ),
+                                                ]
+                                            ),
+                                            html.Fieldset(
+                                                [
+                                                    html.Legend("Supply constraints"),
+                                                    slider_field(
+                                                        "Store capacity",
+                                                        "scenario-capacity",
+                                                        "capacity-value",
+                                                        "100%",
+                                                        dcc.Slider(
+                                                            id="scenario-capacity",
+                                                            min=10,
+                                                            max=150,
+                                                            step=5,
+                                                            marks={
+                                                                v: f"{v}%"
+                                                                for v in [10, 50, 100, 150]
+                                                            },
+                                                            value=100,
+                                                        ),
+                                                    ),
+                                                    slider_field(
+                                                        "Lead-time delay",
+                                                        "scenario-delay",
+                                                        "delay-value",
+                                                        "+0 days",
+                                                        dcc.Slider(
+                                                            id="scenario-delay",
+                                                            min=0,
+                                                            max=4,
+                                                            step=1,
+                                                            marks={v: str(v) for v in range(5)},
+                                                            value=0,
+                                                        ),
+                                                    ),
+                                                ]
                                             ),
                                             html.Div(
                                                 [
-                                                    html.Label(
-                                                        [
-                                                            "Lead-time delay",
-                                                            html.Span(
-                                                                "+0 days",
-                                                                id="delay-value",
-                                                                className="slider-value",
-                                                            ),
-                                                        ],
-                                                        htmlFor="scenario-delay",
-                                                        className="field-label",
+                                                    html.Button(
+                                                        "Run optimizer",
+                                                        id="run-optimizer",
+                                                        n_clicks=0,
+                                                        className="button-primary run-button",
                                                     ),
-                                                    dcc.Slider(
-                                                        id="scenario-delay",
-                                                        min=0,
-                                                        max=4,
-                                                        step=1,
-                                                        marks={v: str(v) for v in range(5)},
-                                                        value=0,
+                                                    html.Div(
+                                                        id="submit-error",
+                                                        role="alert",
+                                                        className="submission-error",
                                                     ),
                                                 ],
-                                                className="slider-field",
-                                            ),
-                                            html.P(
-                                                QUANTILE_NOTE,
-                                                id="quantile-note",
-                                                className="control-note",
-                                            ),
-                                            html.Button(
-                                                "Run optimizer",
-                                                id="run-optimizer",
-                                                n_clicks=0,
-                                                className="button run-button",
-                                            ),
-                                            html.Div(
-                                                id="submit-error",
-                                                role="alert",
-                                                className="submission-error",
+                                                className="form-footer",
                                             ),
                                         ],
-                                        className="panel scenario-controls",
+                                        className="scenario-form",
                                     ),
                                     html.Div(
                                         [
@@ -387,20 +451,27 @@ def layout(repository, defaults=None):
                                                         **{"aria-live": "polite"},
                                                     ),
                                                     html.Div(
-                                                        dropdown(
-                                                            "result-scope",
-                                                            [
-                                                                {
-                                                                    "label": "28-day window",
-                                                                    "value": "decision_window",
-                                                                },
-                                                                {
-                                                                    "label": TAIL_LABEL,
-                                                                    "value": "including_tail",
-                                                                },
-                                                            ],
-                                                            "decision_window",
-                                                        ),
+                                                        [
+                                                            html.Label(
+                                                                "Report",
+                                                                htmlFor="result-scope",
+                                                                className="inline-label",
+                                                            ),
+                                                            dropdown(
+                                                                "result-scope",
+                                                                [
+                                                                    {
+                                                                        "label": "28-day window",
+                                                                        "value": "decision_window",
+                                                                    },
+                                                                    {
+                                                                        "label": TAIL_LABEL,
+                                                                        "value": "including_tail",
+                                                                    },
+                                                                ],
+                                                                "decision_window",
+                                                            ),
+                                                        ],
                                                         className="scope-field",
                                                     ),
                                                 ],
@@ -413,7 +484,7 @@ def layout(repository, defaults=None):
                                                 id="scenario-results",
                                             ),
                                         ],
-                                        className="chart-panel",
+                                        className="results-column",
                                     ),
                                 ],
                                 className="scenario-layout",
@@ -551,6 +622,20 @@ def create_app(root=ROOT, repository=None, manager=None):
             note,
             source,
         )
+
+    @app.callback(
+        Output("forecast-summary", "children"),
+        Input("forecast-origin", "value"),
+        Input("store-filter", "value"),
+        Input("category-filter", "value"),
+        Input("item-filter", "value"),
+    )
+    def update_summary(origin, store, category, item):
+        try:
+            _, date, observed, forecast = repository.forecast_view(origin, store, category, item)
+        except ValueError:
+            return html.P("Choose a store, category and item.", className="muted")
+        return forecast_summary(date, observed, forecast)
 
     @app.callback(
         Output("capacity-value", "children"),
