@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python and locked dependencies
+        run: |
+          uv python install
+          uv sync --locked --extra dashboard
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Compile
+        run: uv run python -m compileall -q src app scripts
+
+      # Integration tests need a live PostgreSQL; SQL tests skip without
+      # local server binaries. Neither data nor a database is needed here.
+      - name: Unit tests
+        run: uv run pytest -m "not integration and not slow"

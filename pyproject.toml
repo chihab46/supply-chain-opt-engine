@@ -42,6 +42,8 @@ packages = ["src/supply_chain_opt_engine"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The dashboard package lives outside src/; make it importable for tests.
+pythonpath = ["."]
 addopts = "-ra --strict-config --strict-markers"
 markers = [
     "integration: requires a running PostgreSQL instance",
