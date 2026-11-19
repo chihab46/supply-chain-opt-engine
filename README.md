@@ -7,29 +7,43 @@ and a Pyomo/HiGHS replenishment solver, with a working Plotly Dash simulator.
 
 ## Headline result
 
-On the December 2015 holdout fold (600 store-item series, 42 days of actual
-sales; never used to tune the forecasts), the **weekly-replanned MILP costs 30% less than the strongest baseline,
-a weekly-review P90 order-up-to rule, at a higher fill rate.** Both plans meet a
-90% per-store fill target and never exceed store storage.
+**Forecasting holds up out of sample; the inventory saving does not yet.**
 
-| Policy (weekly replanning on actual stock) | Fill rate | Lowest store | Order fees | Total cost | Orders |
+- **Forecasts.** LightGBM quantile forecasts beat AutoETS on the December 2015
+  holdout (59.2% vs 65.0% leaf WMAPE) and again on three pre-registered, unused
+  2016 windows (48.5–52.1% vs 51.8–55.9%), with 88–90% coverage for nominal 90%
+  intervals against about 65% for AutoETS.
+- **Inventory, holdout.** With weekly replanning, the MILP cost 30% less than a
+  weekly-review P90 order-up-to rule at higher fill, both meeting a 90% per-store
+  fill target within storage.
+- **Inventory, fresh test.** On the three 2016 windows, fixed in a
+  [pre-registered protocol](docs/fresh_evaluation.md) committed before the run,
+  **both policies exceeded storage in every window**, so no saving is defined.
+  The MILP still cost 28–33% less and kept 98%+ fill, but it also overflowed
+  inside the 28-day decision window, where the baseline did not: it plans
+  storage to the limit on the P90 forecast and leaves no headroom for demand
+  that comes in lower.
+
+Holdout results, December 2015, every policy replanned weekly on actual stock:
+
+| Policy | Fill rate | Lowest store | Order fees | Total cost | Orders |
 | --- | --- | --- | --- | --- | --- |
 | **MinT P90 MILP** | **98.33%** | **97.97%** | **$10,965** | **$17,305** | **1,582** |
 | P90 order-up-to, weekly review | 97.83% | 97.06% | $18,187 | $24,659 | 2,587 |
 | P90 order-up-to, daily review | 97.62% | 96.90% | $49,782 | $56,255 | 7,063 |
 
-The saving comes mostly from placing 39% fewer orders ($7,222 in fees) and
-losing fewer sales ($940), while holding $808 more stock. Read it with these
-limits:
+On the holdout, the saving comes mostly from placing 39% fewer orders ($7,222
+in fees) and losing fewer sales ($940), while holding $808 more stock. Limits:
 
 - **Costs are synthetic.** M5 has no costs, lead times or storage; they are
   seeded assumptions (see [Scope and load](#scope-and-load)).
-- **Not a clean test.** The service floor, stockout penalty and rolling replan
-  were designed after the holdout had been inspected. A fresh, untouched period
-  is needed before claiming savings.
-- **Not proven optimal.** HiGHS gaps were 34–55% at the first three weekly
-  reviews and under 1% at the last.
+- **The holdout was not a clean test** of the inventory design: the service
+  floor, stockout penalty and rolling replan were chosen after inspecting it.
+  The fresh test was clean, and it did not support the saving.
+- **Not proven optimal.** HiGHS gaps were 31–55% at most reviews.
 - **Forecasts are not refreshed** between weekly reviews; only on-hand stock is.
+- **No untouched data remains.** Any storage fix can only be evaluated on the
+  2016 windows already used, so it would be exploratory.
 
 ### How the result changed
 
@@ -45,6 +59,11 @@ limits:
 3. **The first baseline was too weak.** Daily order-up-to rules pay a fee nearly
    every day; against them the MILP looked 69% cheaper. The weekly-review
    baseline is the fair comparison, giving 30%.
+4. **The fresh test did not confirm it.** Run under a protocol committed
+   before any 2016 result existed, the same design exceeded storage in all
+   three new windows, for both the MILP and the baseline. Weekly replanning was
+   enough on the holdout but not on fresh data, and the MILP's tight use of
+   storage made it the more fragile of the two.
 
 See the [business brief](docs/business_case.md) for the decision and limits, and
 [inventory documentation](docs/optimization.md) for the model, rolling rules and
@@ -466,7 +485,7 @@ uv sync --extra dashboard
 uv run --extra dashboard python -m app.dashboard
 ```
 
-Open [localhost:8050](http://127.0.0.1:8050). The forecast explorer drills from
+Open [localhost:8050](http://127.0.0.1:8050). The demand forecast view drills from
 Total to Store, Category and Item, with saved uncertainty bands, daily values and
 clearly scoped SHAP explanations. It supports the latest origin and all four
 historical folds.

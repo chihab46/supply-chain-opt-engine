@@ -3,15 +3,22 @@
 ## Bottom line
 
 On a December 2015 holdout of 600 store-item series, a forecast-driven
-optimizer that replans weekly **cost 30% less than a weekly-review reorder rule
-at a higher fill rate (98.3% versus 97.8%)**. Both met a 90% per-store fill
-target and stayed within store storage. The saving comes mainly from placing
-39% fewer orders.
+optimizer that replans weekly cost 30% less than a weekly-review reorder rule
+at a higher fill rate (98.3% versus 97.8%), with both inside storage and above
+a 90% per-store fill target.
 
-This is a prototype result, not a savings estimate. Costs and storage are
-synthetic, the planning rules were redesigned after the holdout was inspected,
-and the optimizer's plans are good but not proven optimal. The next step is a
-test on an untouched period, then a shadow pilot with real cost data.
+**That saving did not hold up in a clean test.** On three unused 2016 windows,
+evaluated under a protocol fixed before the run, both the optimizer and the
+reorder rule exceeded store storage in every window, so no saving can be
+claimed. The optimizer stayed 28–33% cheaper on paper, but it overflowed even
+within the planning window: it fills storage to the limit on a high forecast
+and has no headroom when demand comes in lower. The forecasts themselves did
+replicate: LightGBM beat the statistical benchmark again on all three windows.
+
+The next step is to plan with storage headroom against forecast error, then
+validate on genuinely new data with real cost inputs. Costs here are synthetic,
+and the optimizer's plans are good but not proven optimal. See the
+[fresh-period results](fresh_evaluation.md#results).
 
 ## Decision and user
 
@@ -103,10 +110,12 @@ projected fill); it has no observed future result.
 
 ## What is needed before a real deployment
 
-- **An untouched test period.** The penalty, service floor, rolling replan and
-  weekly baseline were all chosen after the December 2015 holdout was inspected,
-  so that holdout is no longer an independent test. The M5 data from March to
-  May 2016 is still unused.
+- **Storage headroom, then new data.** The pre-registered 2016 test showed that
+  both plans overflow storage when demand comes in below the P90 forecast. Plan
+  storage against forecast error (a capacity buffer, a higher-quantile or
+  scenario-based storage constraint, or reviews that continue into the tail),
+  then test on data not yet seen. All M5 data is now used, so that test needs
+  new data, ideally a real retailer's.
 - **Real economics.** Agree the service requirement with an operations owner,
   then obtain actual stock, supplier calendars, lead-time distributions,
   ordering costs, storage constraints and the business value of a lost sale.
