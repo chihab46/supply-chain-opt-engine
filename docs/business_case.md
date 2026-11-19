@@ -127,7 +127,8 @@ projected fill); it has no observed future result.
 - **Operational limits.** Check purchase budgets, supplier limits and real
   ordering cadence, then run a shadow-planning pilot with human review.
 
-See the [README](../README.md#headline-result) for the full results and
+See the [README](../README.md#headline-result) for the summary, the
+[pipeline guide](pipeline.md#evaluation) for the full results tables, and
 [inventory definitions](optimization.md) for the model, rolling rules and
 commands. [Benchmark evidence](benchmarks/README.md) still holds the
 pre-revision runs.
