@@ -1,0 +1,78 @@
+[
+  {
+    "scenario": 0,
+    "config": {
+      "service_quantile": 0.9,
+      "minimum_fill_rate": 0,
+      "shortage_penalty_multiplier": 1.0,
+      "time_limit_seconds": 60,
+      "mip_relative_gap": 0.01,
+      "capacity_multiplier": 1.0,
+      "lead_time_shock_days": 0,
+      "tail_days": 14,
+      "seed": 42,
+      "num_threads": 1,
+      "safety_stock_z": 1.2815515655446004
+    },
+    "status": "optimized",
+    "bundle": "artifacts/orders/optimization/20261112T104757Z-d1dc8d5c",
+    "manifest_sha256": "7e1c3dc5942bd46dc25e09860ad204225f6772ccdf6acbd11a9e539f256f4100"
+  },
+  {
+    "scenario": 1,
+    "config": {
+      "service_quantile": 0.9,
+      "minimum_fill_rate": 0.8,
+      "shortage_penalty_multiplier": 1.0,
+      "time_limit_seconds": 60,
+      "mip_relative_gap": 0.01,
+      "capacity_multiplier": 1.0,
+      "lead_time_shock_days": 0,
+      "tail_days": 14,
+      "seed": 42,
+      "num_threads": 1,
+      "safety_stock_z": 1.2815515655446004
+    },
+    "status": "optimized",
+    "bundle": "artifacts/orders/optimization/20261112T104841Z-54b29a40",
+    "manifest_sha256": "d908858edceb642cd77a20ea38355eb2c77ff9322894179fcff61c06f4785540"
+  },
+  {
+    "scenario": 2,
+    "config": {
+      "service_quantile": 0.9,
+      "minimum_fill_rate": 0.9,
+      "shortage_penalty_multiplier": 1.0,
+      "time_limit_seconds": 60,
+      "mip_relative_gap": 0.01,
+      "capacity_multiplier": 1.0,
+      "lead_time_shock_days": 0,
+      "tail_days": 14,
+      "seed": 42,
+      "num_threads": 1,
+      "safety_stock_z": 1.2815515655446004
+    },
+    "status": "optimized",
+    "bundle": "artifacts/orders/optimization/20261112T105003Z-7e406ee7",
+    "manifest_sha256": "83c1b0cad39273413dd3f94b9dd5a875991cbcab54dcd1ecfc76607d08c686c3"
+  },
+  {
+    "scenario": 3,
+    "config": {
+      "service_quantile": 0.9,
+      "minimum_fill_rate": 0.95,
+      "shortage_penalty_multiplier": 1.0,
+      "time_limit_seconds": 60,
+      "mip_relative_gap": 0.01,
+      "capacity_multiplier": 1.0,
+      "lead_time_shock_days": 0,
+      "tail_days": 14,
+      "seed": 42,
+      "num_threads": 1,
+      "safety_stock_z": 1.2815515655446004
+    },
+    "status": "optimized",
+    "bundle": "artifacts/orders/optimization/20261112T105125Z-2ca0d803",
+    "manifest_sha256": "3d5efd94b0e91b26562cf864a371efae08fd21f019a3f3d8fbbdde5b5f582490"
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "scenario": 0,
+    "config": {
+      "service_quantile": 0.9,
+      "minimum_fill_rate": 1.0,
+      "shortage_penalty_multiplier": 10.0,
+      "time_limit_seconds": 60,
+      "mip_relative_gap": 0.01,
+      "capacity_multiplier": 0.75,
+      "lead_time_shock_days": 0,
+      "tail_days": 14,
+      "seed": 42,
+      "num_threads": 1,
+      "safety_stock_z": 1.2815515655446004
+    },
+    "status": "infeasible",
+    "diagnostics": [
+      {
+        "store_id": "CA_1",
+        "termination": "infeasible",
+        "incumbent_objective": null,
+        "objective_bound": null,
+        "relative_gap": null,
+        "build_seconds": 0.7962414630019339,
+        "solve_seconds": 4.330911630000628,
+        "variables": 37128,
+        "constraints": 37172,
+        "order_variables": 5712,
+        "has_feasible_solution": false,
+        "minimum_fill_rate": 1.0,
+        "strategy": "coupled_store_service_floor",
+        "time_limit_seconds": 20.0
+      }
+    ],
+    "bundle": "artifacts/orders/optimization/20261112T105347Z-1c009c74"
+  }
+]

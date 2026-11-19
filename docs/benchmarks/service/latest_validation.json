@@ -1,0 +1,37 @@
+{
+  "run_id": "20261112T105218Z-1b0faa3e",
+  "manifest_sha256": "4afb957981e0598adc844b3ed29f3e1ab7c6c19dc191f51e5158168922963155",
+  "artifacts_verified": 9,
+  "source_files_verified": 4,
+  "phases": [
+    {
+      "phase": "latest",
+      "series": 600,
+      "policies": [
+        "lightgbm_mint_milp",
+        "lightgbm_p50_order_up_to",
+        "lightgbm_p90_order_up_to"
+      ],
+      "solver_objective": 11785.035378860173,
+      "solver_bound": 4896.47084119058,
+      "relative_gap": 0.5845179345007484,
+      "solve_seconds": 63.50950916499278,
+      "phase_seconds": 79.83205320799607,
+      "exported_orders": 18995
+    }
+  ],
+  "purchase_order_rows": 18995,
+  "capacity_infeasible_replays": [],
+  "max_replay_error": 0.0,
+  "max_capacity_violation_m3": 0.0,
+  "checks": [
+    "All checksums and scenario lineage verified",
+    "Pre-origin 56-day statistics and shared item economics verified",
+    "Pipeline orders predate the origin; arrivals obey shocked lead times",
+    "Integer orders, MOQs, receipt dates and purchase exports agree",
+    "Every inventory/fulfillment row independently replayed",
+    "All policies use identical realized demand and scenario inputs",
+    "Cost, fill rate and inventory capital recomputed for both windows",
+    "Solver objectives and certified lower bounds match exported plans"
+  ]
+}

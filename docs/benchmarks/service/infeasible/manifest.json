@@ -1,0 +1,56 @@
+{
+  "run_id": "20261112T105345Z-165d0499",
+  "status": "evaluated",
+  "phase": "holdout",
+  "reconciliation_manifest": "artifacts/forecasts/reconciliation/20261111T175055Z-ad5ca98d/manifest.json",
+  "reconciliation_manifest_sha256": "ca0ecf8661aff5931881ccf410ca6fd5d1c7d040fb5330d581aff3b1a75671d0",
+  "baseline_manifest": "artifacts/metrics/baselines/20261111T162554Z-2f637d4b/manifest.json",
+  "baseline_manifest_sha256": "71ccfd5fa5e98c8de107823cb5e0e3e8bbafcc7a0499b7df59aad5d04d8a8f57",
+  "scenario_assumptions": "Synthetic economics and inventory; no measured Walmart savings",
+  "interpretation": "Exploratory sensitivity after historical holdout review. Do not select or tune a deployment policy on these scores; validate on a new period. Projected service floors do not guarantee realized service.",
+  "experiments": [
+    {
+      "scenario": 0,
+      "config": {
+        "service_quantile": 0.9,
+        "minimum_fill_rate": 1.0,
+        "shortage_penalty_multiplier": 10.0,
+        "time_limit_seconds": 60,
+        "mip_relative_gap": 0.01,
+        "capacity_multiplier": 0.75,
+        "lead_time_shock_days": 0,
+        "tail_days": 14,
+        "seed": 42,
+        "num_threads": 1,
+        "safety_stock_z": 1.2815515655446004
+      },
+      "status": "infeasible",
+      "diagnostics": [
+        {
+          "store_id": "CA_1",
+          "termination": "infeasible",
+          "incumbent_objective": null,
+          "objective_bound": null,
+          "relative_gap": null,
+          "build_seconds": 0.7962414630019339,
+          "solve_seconds": 4.330911630000628,
+          "variables": 37128,
+          "constraints": 37172,
+          "order_variables": 5712,
+          "has_feasible_solution": false,
+          "minimum_fill_rate": 1.0,
+          "strategy": "coupled_store_service_floor",
+          "time_limit_seconds": 20.0
+        }
+      ],
+      "bundle": "artifacts/orders/optimization/20261112T105347Z-1c009c74"
+    }
+  ],
+  "code_sha256": {
+    "inventory_tradeoff.py": "a2832db948bb4d101e58e24deb6bcb401d2300ff7be5fe22bdb7ea58641d12cf"
+  },
+  "artifact_sha256": {
+    "experiments.json": "a33d170b6b2b04ae1bd1374271dbe356ebc0a6e83361e98d4caa5d8b1c687dcc",
+    "tradeoff_metrics.csv": "5cc95e4fc81877cb2a48fe118cb8d91fcdb9fcfdff700fce8b83fe6742cdf46f"
+  }
+}

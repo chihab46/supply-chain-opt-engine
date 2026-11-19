@@ -1,0 +1,225 @@
+[
+  {
+    "run_id": "20261112T104757Z-d1dc8d5c",
+    "manifest_sha256": "7e1c3dc5942bd46dc25e09860ad204225f6772ccdf6acbd11a9e539f256f4100",
+    "artifacts_verified": 9,
+    "source_files_verified": 4,
+    "phases": [
+      {
+        "phase": "holdout",
+        "series": 600,
+        "policies": [
+          "lightgbm_mint_milp",
+          "lightgbm_p50_order_up_to",
+          "lightgbm_p90_order_up_to",
+          "seasonal_naive_p50_order_up_to",
+          "autoets_static_safety_stock"
+        ],
+        "solver_objective": 1298.2531984726843,
+        "solver_bound": 1294.979409167075,
+        "relative_gap": 0.00252168784137086,
+        "solve_seconds": 33.141218251046666,
+        "phase_seconds": 42.28994239200256,
+        "exported_orders": 28004
+      }
+    ],
+    "purchase_order_rows": 28004,
+    "capacity_infeasible_replays": [
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_p90_order_up_to",
+        "evaluation": "realized",
+        "scope": "including_tail",
+        "max_capacity_violation_m3": 130.3367766785713
+      }
+    ],
+    "max_replay_error": 0.0,
+    "max_capacity_violation_m3": 130.3367766785713,
+    "checks": [
+      "All checksums and scenario lineage verified",
+      "Pre-origin 56-day statistics and shared item economics verified",
+      "Pipeline orders predate the origin; arrivals obey shocked lead times",
+      "Integer orders, MOQs, receipt dates and purchase exports agree",
+      "Every inventory/fulfillment row independently replayed",
+      "All policies use identical realized demand and scenario inputs",
+      "Cost, fill rate and inventory capital recomputed for both windows",
+      "Solver objectives and certified lower bounds match exported plans"
+    ]
+  },
+  {
+    "run_id": "20261112T104841Z-54b29a40",
+    "manifest_sha256": "d908858edceb642cd77a20ea38355eb2c77ff9322894179fcff61c06f4785540",
+    "artifacts_verified": 9,
+    "source_files_verified": 4,
+    "phases": [
+      {
+        "phase": "holdout",
+        "series": 600,
+        "policies": [
+          "lightgbm_mint_milp",
+          "lightgbm_p50_order_up_to",
+          "lightgbm_p90_order_up_to",
+          "seasonal_naive_p50_order_up_to",
+          "autoets_static_safety_stock"
+        ],
+        "solver_objective": 8977.877962228935,
+        "solver_bound": 3558.521694070869,
+        "relative_gap": 0.6036344324302448,
+        "solve_seconds": 63.5874172029944,
+        "phase_seconds": 79.41098685299949,
+        "exported_orders": 29290
+      }
+    ],
+    "purchase_order_rows": 29290,
+    "capacity_infeasible_replays": [
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_mint_milp",
+        "evaluation": "realized",
+        "scope": "including_tail",
+        "max_capacity_violation_m3": 40.26872967857139
+      },
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_p90_order_up_to",
+        "evaluation": "realized",
+        "scope": "including_tail",
+        "max_capacity_violation_m3": 130.3367766785713
+      }
+    ],
+    "max_replay_error": 0.0,
+    "max_capacity_violation_m3": 130.3367766785713,
+    "checks": [
+      "All checksums and scenario lineage verified",
+      "Pre-origin 56-day statistics and shared item economics verified",
+      "Pipeline orders predate the origin; arrivals obey shocked lead times",
+      "Integer orders, MOQs, receipt dates and purchase exports agree",
+      "Every inventory/fulfillment row independently replayed",
+      "All policies use identical realized demand and scenario inputs",
+      "Cost, fill rate and inventory capital recomputed for both windows",
+      "Solver objectives and certified lower bounds match exported plans"
+    ]
+  },
+  {
+    "run_id": "20261112T105003Z-7e406ee7",
+    "manifest_sha256": "83c1b0cad39273413dd3f94b9dd5a875991cbcab54dcd1ecfc76607d08c686c3",
+    "artifacts_verified": 9,
+    "source_files_verified": 4,
+    "phases": [
+      {
+        "phase": "holdout",
+        "series": 600,
+        "policies": [
+          "lightgbm_mint_milp",
+          "lightgbm_p50_order_up_to",
+          "lightgbm_p90_order_up_to",
+          "seasonal_naive_p50_order_up_to",
+          "autoets_static_safety_stock"
+        ],
+        "solver_objective": 11287.778427315348,
+        "solver_bound": 4582.3697652051005,
+        "relative_gap": 0.5940414852477789,
+        "solve_seconds": 63.49172089700005,
+        "phase_seconds": 78.94235423899954,
+        "exported_orders": 29518
+      }
+    ],
+    "purchase_order_rows": 29518,
+    "capacity_infeasible_replays": [
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_mint_milp",
+        "evaluation": "realized",
+        "scope": "decision_window",
+        "max_capacity_violation_m3": 16.340110678571392
+      },
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_mint_milp",
+        "evaluation": "realized",
+        "scope": "including_tail",
+        "max_capacity_violation_m3": 80.71740967857136
+      },
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_p90_order_up_to",
+        "evaluation": "realized",
+        "scope": "including_tail",
+        "max_capacity_violation_m3": 130.3367766785713
+      }
+    ],
+    "max_replay_error": 0.0,
+    "max_capacity_violation_m3": 130.3367766785713,
+    "checks": [
+      "All checksums and scenario lineage verified",
+      "Pre-origin 56-day statistics and shared item economics verified",
+      "Pipeline orders predate the origin; arrivals obey shocked lead times",
+      "Integer orders, MOQs, receipt dates and purchase exports agree",
+      "Every inventory/fulfillment row independently replayed",
+      "All policies use identical realized demand and scenario inputs",
+      "Cost, fill rate and inventory capital recomputed for both windows",
+      "Solver objectives and certified lower bounds match exported plans"
+    ]
+  },
+  {
+    "run_id": "20261112T105125Z-2ca0d803",
+    "manifest_sha256": "3d5efd94b0e91b26562cf864a371efae08fd21f019a3f3d8fbbdde5b5f582490",
+    "artifacts_verified": 9,
+    "source_files_verified": 4,
+    "phases": [
+      {
+        "phase": "holdout",
+        "series": 600,
+        "policies": [
+          "lightgbm_mint_milp",
+          "lightgbm_p50_order_up_to",
+          "lightgbm_p90_order_up_to",
+          "seasonal_naive_p50_order_up_to",
+          "autoets_static_safety_stock"
+        ],
+        "solver_objective": 12421.872226087651,
+        "solver_bound": 5410.816955170559,
+        "relative_gap": 0.564412122690564,
+        "solve_seconds": 65.92569592799555,
+        "phase_seconds": 85.28131874600513,
+        "exported_orders": 29622
+      }
+    ],
+    "purchase_order_rows": 29622,
+    "capacity_infeasible_replays": [
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_mint_milp",
+        "evaluation": "realized",
+        "scope": "decision_window",
+        "max_capacity_violation_m3": 35.83147067857135
+      },
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_mint_milp",
+        "evaluation": "realized",
+        "scope": "including_tail",
+        "max_capacity_violation_m3": 102.28810067857135
+      },
+      {
+        "phase": "holdout",
+        "policy": "lightgbm_p90_order_up_to",
+        "evaluation": "realized",
+        "scope": "including_tail",
+        "max_capacity_violation_m3": 130.3367766785713
+      }
+    ],
+    "max_replay_error": 0.0,
+    "max_capacity_violation_m3": 130.3367766785713,
+    "checks": [
+      "All checksums and scenario lineage verified",
+      "Pre-origin 56-day statistics and shared item economics verified",
+      "Pipeline orders predate the origin; arrivals obey shocked lead times",
+      "Integer orders, MOQs, receipt dates and purchase exports agree",
+      "Every inventory/fulfillment row independently replayed",
+      "All policies use identical realized demand and scenario inputs",
+      "Cost, fill rate and inventory capital recomputed for both windows",
+      "Solver objectives and certified lower bounds match exported plans"
+    ]
+  }
+]
