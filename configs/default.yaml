@@ -69,5 +69,16 @@ optimization:
   lead_time_shock_days: 0
   # Holdout only: also replan every policy weekly from realized on-hand stock.
   rolling_review_days: 7
+fresh_evaluation:
+  # Pre-registered in docs/fresh_evaluation.md before any result on these
+  # windows existed. Do not edit after the run; variations are exploratory.
+  origins: [2016-01-10, 2016-02-21, 2016-04-03]
+  first_fold_id: 5
+  primary_policy: lightgbm_mint_milp_rolling
+  primary_baseline: lightgbm_p90_weekly_order_up_to_rolling
+  ingestion_run_id: 20261119T152927Z-596696fe
+  lightgbm_run_id: 20261119T153241Z-d725af75
+  reconciliation_run_id: 20261119T154145Z-2da2199f
+  baseline_run_id: 20261119T154311Z-cf01203f
 artifacts:
   root_dir: artifacts
