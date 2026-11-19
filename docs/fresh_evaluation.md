@@ -112,12 +112,19 @@ rolling versions of both policies.
   the 14-day tail at the P90 forecast. When actual tail demand is lower, stock
   accumulates with no review left to stop it. This explains every baseline
   overflow, all on tail days (F1 Feb 12–13, F2 Mar 25–26, F3 May 6).
-- **The MILP leaves no headroom.** It also overflows **inside** the 28-day
+- **The MILP holds more stock.** It also overflows **inside** the 28-day
   decision window in every window (2.4, 9.1 and 1.9 m³; F1 Jan 16, F2 Feb 27
-  and Mar 18–20, F3 Apr 9), where the weekly baseline stays within storage. The
-  MILP plans end-of-day stock up to the storage limit on the P90 forecast, so a
-  week of below-forecast demand is enough to push it over. The baseline's
-  simpler rule happens to leave slack.
+  and Mar 18–20, F3 Apr 9), where the weekly baseline stays within storage. On
+  the P90 forecast its plans peak at 84% of capacity, against 62–66% for the
+  baseline, so the same gap between P90 demand and lower actual demand pushes
+  it over sooner.
+
+> **Correction, 2026-11-19.** This section first said the MILP "plans
+> end-of-day stock up to the storage limit". Measured afterwards, its
+> forecast-scenario peak is 84% of capacity, not 100%. The overflow comes from
+> planning against P90 demand when actual demand is lower, which both policies
+> do; realized peaks were 103–108% of capacity for both. See the exploratory
+> [storage-headroom analysis](storage_headroom.md).
 
 The December 2015 holdout did not show this: with rolling reviews, both
 policies stayed within storage there. That result did not generalize.

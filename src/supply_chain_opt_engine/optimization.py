@@ -13,7 +13,7 @@ import platform
 import tempfile
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -62,6 +62,10 @@ class OptimizationConfig:
     safety_stock_z: float = 1.2815515655446004
     # Days between rolling replans on realized state; 0 keeps frozen plans only.
     rolling_review_days: int = 0
+    # Share of each store's capacity that planners may fill. Replay and every
+    # storage check still use the full capacity, so a share below 1 leaves
+    # headroom for demand that comes in below forecast. Applies to all policies.
+    planning_capacity_share: float = 1.0
 
     def __post_init__(self):
         if self.service_quantile not in QUANTILES:
@@ -76,6 +80,12 @@ class OptimizationConfig:
             or not 0 <= self.minimum_fill_rate <= 1
         ):
             raise ValueError("Minimum fill rate must be a finite fraction between 0 and 1.")
+        if (
+            isinstance(self.planning_capacity_share, bool)
+            or not np.isfinite(self.planning_capacity_share)
+            or not 0 < self.planning_capacity_share <= 1
+        ):
+            raise ValueError("Planning capacity share must lie in (0, 1].")
         if not np.isfinite(self.mip_relative_gap) or not 0 <= self.mip_relative_gap < 1:
             raise ValueError("MIP relative gap must lie in [0,1).")
         for name, low, high in [
@@ -175,9 +185,36 @@ def solve_stores(data, config, log_dir):
     return orders, diagnostics
 
 
+def raised_to_committed(sub):
+    """Lift a store's planning capacity to the stock it already has committed.
+
+    After below-forecast demand, on-hand stock plus the pipeline can exceed a
+    store's (buffered) planning capacity with no new orders at all. Planning
+    is then infeasible, yet ordering nothing for the whole store only adds
+    stockouts. Returns the subproblem with each such store's capacity raised to
+    its zero-order forecast peak, or None when committed stock fits everywhere.
+    """
+    from supply_chain_opt_engine.simulation import inventory_trace
+
+    trace = inventory_trace(sub, np.zeros((sub.n, sub.decision_days), dtype=int))
+    volume = sub.catalog.unit_volume_m3.to_numpy()
+    stores = sub.catalog.store_id.to_numpy()
+    capacity = dict(sub.capacity)
+    raised = False
+    for store, limit in sub.capacity.items():
+        peak = float((volume[stores == store] @ trace["inventory"][stores == store]).max())
+        if peak > limit + 1e-9:
+            capacity[store] = peak * (1 + 1e-9) + 1e-9
+            raised = True
+    return replace(sub, capacity=capacity) if raised else None
+
+
 def milp_review_planner(config, log_root):
-    """Plan one rolling review; relax the floor, then order nothing, if infeasible."""
-    from dataclasses import replace
+    """Plan one rolling review.
+
+    If infeasible: first lift capacity to already-committed stock, then relax
+    the service floor, and only then order nothing.
+    """
 
     def plan(sub, review):
         directory = log_root / f"review_{review:02d}"
@@ -187,6 +224,20 @@ def milp_review_planner(config, log_root):
             return orders, {"status": "optimized", "stores": stores}
         except PlanningFailure as error:
             failure = error.diagnostics
+        raised = raised_to_committed(sub)
+        if raised is not None:
+            lifted = directory / "capacity_raised"
+            lifted.mkdir(exist_ok=True)
+            info = {"raised_capacity_m3": raised.capacity}
+            try:
+                orders, stores = solve_stores(raised, config, lifted)
+                return orders, {
+                    "status": "capacity_raised_to_committed_stock",
+                    "stores": stores,
+                    **info,
+                }
+            except PlanningFailure:
+                sub = raised
         if sub.minimum_fill_rate > 0:
             relaxed = directory / "service_floor_relaxed"
             relaxed.mkdir(exist_ok=True)
@@ -202,12 +253,22 @@ def milp_review_planner(config, log_root):
 
 
 def order_up_to_review_planner(safety, review_period=1):
-    """Re-run an order-up-to rule at a review; overflow already committed means no orders."""
+    """Re-run an order-up-to rule at a review, lifting capacity to committed stock."""
 
     def plan(sub, review):
         try:
             return order_up_to(sub, safety, review_period=review_period), {"status": "planned"}
         except ValueError as error:
+            raised = raised_to_committed(sub)
+            if raised is not None:
+                try:
+                    orders = order_up_to(raised, safety, review_period=review_period)
+                    return orders, {
+                        "status": "capacity_raised_to_committed_stock",
+                        "raised_capacity_m3": raised.capacity,
+                    }
+                except ValueError:
+                    pass
             zero = np.zeros((sub.n, sub.decision_days), dtype=int)
             return zero, {
                 "status": "committed_stock_exceeds_capacity_zero_orders",
@@ -233,24 +294,29 @@ def run_phase(inputs, policy_demands, config, directory, *, actual=None, scenari
     Frozen schedules are fixed at the origin. With realized demand and a positive
     ``rolling_review_days``, every policy is also replanned at weekly reviews from
     realized on-hand stock, as ``<policy>_rolling``.
+
+    Every planner sees ``planning_capacity_share`` of each store's capacity;
+    replay and all storage checks below use the full capacity.
     """
     directory.mkdir(parents=True, exist_ok=False)
     if inputs.minimum_fill_rate != config.minimum_fill_rate:
         raise ValueError("Scenario and optimizer minimum fill rates differ.")
     start = time.perf_counter()
-    orders, diagnostics = solve_stores(inputs, config, directory)
+    share = config.planning_capacity_share
+    plan = replace(inputs, capacity={s: c * share for s, c in inputs.capacity.items()})
+    orders, diagnostics = solve_stores(plan, config, directory)
     schedules = {MILP: orders}
     for policy, demand in policy_demands.items():
         LOGGER.info("Planning %s", policy)
         schedules[policy] = order_up_to(
-            inputs.with_demand(demand),
+            plan.with_demand(demand),
             safety_stock(policy, inputs, config),
             review_period=REVIEW_PERIODS.get(policy, 1),
         )
     rolling_reviews = {}
     if actual is not None and config.rolling_review_days > 0:
         period = config.rolling_review_days
-        planners = {MILP: (inputs.demand, milp_review_planner(config, directory / "rolling"))}
+        planners = {MILP: (plan.demand, milp_review_planner(config, directory / "rolling"))}
         for policy, demand in policy_demands.items():
             planners[policy] = (
                 demand,
@@ -261,7 +327,7 @@ def run_phase(inputs, policy_demands, config, directory, *, actual=None, scenari
         for policy, (forecast, planner) in planners.items():
             LOGGER.info("Rolling replan %s every %d days", policy, period)
             schedules[policy + ROLLING], rolling_reviews[policy + ROLLING] = rolling_schedule(
-                inputs, forecast, actual, planner, period=period
+                plan, forecast, actual, planner, period=period
             )
         (directory / "rolling_reviews.json").write_text(
             json.dumps(rolling_reviews, indent=2, default=str) + "\n"

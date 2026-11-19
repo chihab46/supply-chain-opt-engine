@@ -23,10 +23,12 @@ checked against baselines, including a pre-registered test on unused data.
 
 On the fresh windows the optimizer still cost 28–33% less at 98%+ fill, but it
 overflowed storage even inside the 28-day planning window, where the reorder
-rule did not. It fills storage to the limit on a high (P90) forecast and has no
-headroom when demand comes in lower. The windows, comparison and success rule
+rule did not. Both plan against high (P90) demand, so when actual demand comes
+in lower, unsold stock piles up; the optimizer holds more stock, so it goes
+over sooner. The windows, comparison and success rule
 were [committed before the run](docs/fresh_evaluation.md); the verdict is
-reported as it came out.
+reported as it came out. An [exploratory follow-up](docs/storage_headroom.md)
+showed that a simple storage buffer does not fix it.
 
 ![Replenishment simulator: a held plan, with storage headroom per store against capacity](docs/images/dashboard-simulator.png)
 
@@ -40,7 +42,8 @@ reported as it came out.
 3. **The first baseline was too weak.** Against a daily reorder rule the MILP
    looked 69% cheaper; against a weekly one, the fair comparison, 30%.
 4. **A pre-registered fresh test did not confirm it**, and showed why: the
-   optimizer leaves no storage buffer against forecast error.
+   plans assume P90 demand, and when actual demand is lower the unsold stock
+   overflows storage.
 
 Costs, lead times and capacities are synthetic (M5 has none), the MILP is not
 proven optimal (31–55% gaps), and all M5 data is now used, so a storage fix

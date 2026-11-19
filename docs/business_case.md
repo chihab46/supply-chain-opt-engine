@@ -11,8 +11,9 @@ a 90% per-store fill target.
 evaluated under a protocol fixed before the run, both the optimizer and the
 reorder rule exceeded store storage in every window, so no saving can be
 claimed. The optimizer stayed 28–33% cheaper on paper, but it overflowed even
-within the planning window: it fills storage to the limit on a high forecast
-and has no headroom when demand comes in lower. The forecasts themselves did
+within the planning window: both plans assume high (P90) demand, so when
+actual demand is lower, unsold stock piles up, and the optimizer, which holds
+more stock, goes over first. The forecasts themselves did
 replicate: LightGBM beat the statistical benchmark again on all three windows.
 
 The next step is to plan with storage headroom against forecast error, then
@@ -111,11 +112,13 @@ projected fill); it has no observed future result.
 ## What is needed before a real deployment
 
 - **Storage headroom, then new data.** The pre-registered 2016 test showed that
-  both plans overflow storage when demand comes in below the P90 forecast. Plan
-  storage against forecast error (a capacity buffer, a higher-quantile or
-  scenario-based storage constraint, or reviews that continue into the tail),
-  then test on data not yet seen. All M5 data is now used, so that test needs
-  new data, ideally a real retailer's.
+  both plans overflow storage when demand comes in below the P90 forecast. An
+  [exploratory capacity buffer](storage_headroom.md) did not fix it: the excess
+  comes from stock already ordered for P90 demand, not from planning too close
+  to the limit. Better candidates are ordering less for the no-order tail,
+  planning storage on a lower demand scenario, or pricing overflow. All M5 data
+  is now used, so testing any of them properly needs new data, ideally a real
+  retailer's.
 - **Real economics.** Agree the service requirement with an operations owner,
   then obtain actual stock, supplier calendars, lead-time distributions,
   ordering costs, storage constraints and the business value of a lost sale.

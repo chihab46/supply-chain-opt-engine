@@ -232,10 +232,15 @@ demand available, every policy is also run as `<policy>_rolling`
   not refreshed. This isolates the value of state feedback; re-forecasting at
   each review would require retraining and is not implemented.
 - Only the orders up to the next review are committed.
-- A review whose MILP has no incumbent retries with a zero service floor, then
-  commits no orders; order-up-to commits no orders if committed stock already
-  overflows forecast storage. Every review's status is saved in
-  `rolling_reviews.json`.
+- If a review cannot plan because stock already committed (on hand plus
+  pipeline) exceeds a store's planning capacity, that store's limit is lifted to
+  its committed peak and planning continues. A MILP review that still has no
+  incumbent retries with a zero service floor, and only then commits no orders.
+  Every review's status is saved in `rolling_reviews.json`.
+- `planning_capacity_share` (default 1.0) lets every planner fill only part of
+  each store's capacity while replay checks the full capacity. An
+  [exploratory analysis](storage_headroom.md) found it does not prevent the
+  fresh-period overflow.
 
 Each MILP review receives the full `time_limit_seconds`, so a holdout run takes
 about five minutes. The dashboard ignores this setting to keep interactive jobs

@@ -12,9 +12,21 @@ import pandas as pd
 from supply_chain_opt_engine.hierarchy import Hierarchy
 from supply_chain_opt_engine.history import load_history
 from supply_chain_opt_engine.m5 import checksum
-from supply_chain_opt_engine.optimization import MILP, checked_bundle
+from supply_chain_opt_engine.optimization import MILP, OptimizationConfig, checked_bundle
 
 ALL = "all"
+
+
+def saved_setting(document_config, key):
+    """A saved run's setting, reading fields added later as their default.
+
+    Older bundles predate some settings (for example rolling_review_days or
+    planning_capacity_share); they were produced under the default behaviour.
+    """
+    defaults = OptimizationConfig.__dataclass_fields__
+    return document_config.get(key, defaults[key].default if key in defaults else None)
+
+
 POLICY_LABELS = {
     MILP: "MinT quantile MILP",
     "lightgbm_p50_order_up_to": "Global P50 order-up-to",
@@ -165,7 +177,7 @@ class DashboardRepository:
         for path, document in self.reference_runs:
             if phase not in [p["phase"] for p in document["phases"]]:
                 continue
-            if all(document["config"].get(k) == v for k, v in config.items()):
+            if all(saved_setting(document["config"], k) == v for k, v in config.items()):
                 return path
         return None
 
@@ -180,7 +192,7 @@ class DashboardRepository:
                 or document.get("reconciliation_manifest_sha256") != checksum(self.recpath)
                 or not document.get("forecast_comparison")
                 or not all(
-                    document["config"].get(k) == v
+                    saved_setting(document["config"], k) == v
                     for k, v in config.items()
                     if k != "minimum_fill_rate"
                 )
